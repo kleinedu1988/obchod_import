@@ -1,3 +1,12 @@
+## [0.3.1] - 2026-02-07
+### Změněno
+- **Optimalizace renderování:** Přechod z `ScrollView` na `ListView` (UI Virtualizace). Aplikace nyní vykresluje pouze viditelné řádky, což umožňuje plynulý posun i při 14 000+ záznamech.
+- **Asynchronní načítání:** Načítání a parsování `partneri.json` přesunuto do samostatného vlákna. Start aplikace je okamžitý a GUI nezamrzá.
+
+### Opraveno
+- **Critical Fix:** Opraveno zamrzání aplikace (Application Not Responding) při práci s velkým množstvím dat.
+- **UI Layout:** Opraveno zarovnání stavových indikátorů (puntíků) v tabulce pomocí vnořených layoutů.
+
 ## [0.3.0] - 2026-02-07
 ### Přidáno
 - **Jádro importu:** Implementována kompletní logika pro čtení Excel souborů (`.xlsx`) pomocí knihovny `calamine`.

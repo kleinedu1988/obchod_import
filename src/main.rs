@@ -35,7 +35,7 @@ fn main() -> Result<(), slint::PlatformError> {
     let main_window = AppWindow::new()?;
     let progress_window = ProgressWindow::new()?;
 
-    // 2. NAČTENÍ KONFIGURACE
+    // 2. NAČTENÍ KONFIGURACE A STAVU
     let config = nacti_konfiguraci();
     main_window.set_cesta_archiv(config.cesta_archiv.into());
     main_window.set_cesta_vyroba(config.cesta_vyroba.into());
@@ -43,37 +43,39 @@ fn main() -> Result<(), slint::PlatformError> {
     
     // Kontrola stavu při startu
     aktualizuj_stav_db(&main_window);
+    obnov_tabulku_partneru(&main_window);
 
     // --- CALLBACKY PRO NASTAVENÍ ---
     
     let mw_handle = main_window.as_weak();
     main_window.on_vybrat_archiv(move || {
         if let Some(folder) = rfd::FileDialog::new().pick_folder() {
-            mw_handle.unwrap().set_cesta_archiv(folder.to_string_lossy().to_string().into());
+            let _ = mw_handle.upgrade().map(|ui| ui.set_cesta_archiv(folder.to_string_lossy().to_string().into()));
         }
     });
 
     let mw_handle = main_window.as_weak();
     main_window.on_vybrat_vyrobu(move || {
         if let Some(folder) = rfd::FileDialog::new().pick_folder() {
-            mw_handle.unwrap().set_cesta_vyroba(folder.to_string_lossy().to_string().into());
+            let _ = mw_handle.upgrade().map(|ui| ui.set_cesta_vyroba(folder.to_string_lossy().to_string().into()));
         }
     });
 
     let mw_handle = main_window.as_weak();
     main_window.on_ulozit_nastaveni(move || {
-        let ui = mw_handle.unwrap();
-        let cfg = Config {
-            cesta_archiv: ui.get_cesta_archiv().to_string(),
-            cesta_vyroba: ui.get_cesta_vyroba().to_string(),
-        };
-        uloz_konfiguraci(cfg);
+        if let Some(ui) = mw_handle.upgrade() {
+            let cfg = Config {
+                cesta_archiv: ui.get_cesta_archiv().to_string(),
+                cesta_vyroba: ui.get_cesta_vyroba().to_string(),
+            };
+            uloz_konfiguraci(cfg);
+        }
     });
 
     // --- HLAVNÍ LOGIKA S DVĚMA OKNY ---
     
-    let mw_handle = main_window.as_weak();       // Handle na Hlavní okno
-    let pw_handle = progress_window.as_weak();   // Handle na Progress okno
+    let mw_handle = main_window.as_weak();
+    let pw_handle = progress_window.as_weak();
 
     main_window.on_spustit_synchronizaci(move || {
         // Výběr souboru
@@ -85,14 +87,13 @@ fn main() -> Result<(), slint::PlatformError> {
             };
 
         // 1. ZOBRAZIT PROGRESS OKNO
-        let progress_ui = pw_handle.unwrap();
-        progress_ui.set_progress(0.0);
-        progress_ui.set_status("Načítám Excel...".into());
-        let _ = progress_ui.show(); // Zobrazí malé okno
+        if let Some(progress_ui) = pw_handle.upgrade() {
+            progress_ui.set_progress(0.0);
+            progress_ui.set_status("Načítám Excel...".into());
+            let _ = progress_ui.show();
+        }
 
         let path_to_process = file_path.to_string_lossy().to_string();
-        
-        // Klonování handle pro vlákno
         let thread_pw = pw_handle.clone();
         let thread_mw = mw_handle.clone();
 
@@ -100,57 +101,51 @@ fn main() -> Result<(), slint::PlatformError> {
         thread::spawn(move || {
             let mut partneri_map: HashMap<String, Partner> = HashMap::new();
 
-            // Načtení existujících dat z JSON
             if let Ok(data) = fs::read_to_string("partneri.json") {
                 if let Ok(db) = serde_json::from_str::<Databaze>(&data) {
                     for p in db.partneri { partneri_map.insert(p.id.clone(), p); }
                 }
             }
 
-            // Zpracování Excelu
             if let Ok(mut workbook) = open_workbook::<Xlsx<_>, _>(path_to_process) {
                 if let Some(Ok(range)) = workbook.worksheet_range_at(0) {
                     let rows: Vec<_> = range.rows().collect();
                     let total_rows = rows.len() as f32;
 
                     for (idx, row) in rows.iter().enumerate() {
-                        if idx == 0 { continue; } // Přeskočit záhlaví
+                        if idx == 0 { continue; }
                         
                         let id = row[0].to_string().trim().to_string();
                         let nazev = row[1].to_string().trim().to_string();
 
                         if !id.is_empty() {
                             let ted = Local::now().format("%d.%m.%Y %H:%M").to_string();
-                            
                             if let Some(p) = partneri_map.get_mut(&id) {
-                                // Aktualizace existujícího (složka zůstává)
                                 if p.nazev != nazev { 
                                     p.nazev = nazev; 
                                     p.aktualizovano = ted; 
                                 }
                             } else {
-                                // Nový záznam
                                 partneri_map.insert(id.clone(), Partner {
                                     id, nazev, slozka: String::new(), aktualizovano: ted,
                                 });
                             }
                         }
 
-                        // Aktualizace Progress Baru (každých 5 řádků)
                         if idx % 5 == 0 {
                             let val = idx as f32 / total_rows;
                             let p_ui = thread_pw.clone();
                             let _ = slint::invoke_from_event_loop(move || {
-                                let ui = p_ui.unwrap();
-                                ui.set_progress(val);
-                                ui.set_status(format!("Zpracovávám řádek {}...", idx).into());
+                                if let Some(ui) = p_ui.upgrade() {
+                                    ui.set_progress(val);
+                                    ui.set_status(format!("Zpracovávám řádek {}...", idx).into());
+                                }
                             });
                         }
                     }
                 }
             }
 
-            // Uložení výsledků do JSON
             let nyni = Local::now().format("%d.%m.%Y %H:%M").to_string();
             let nova_db = Databaze { 
                 posledni_sync: nyni, 
@@ -161,10 +156,13 @@ fn main() -> Result<(), slint::PlatformError> {
                 let _ = fs::write("partneri.json", json);
             }
 
-            // UKONČENÍ: Skrýt malé okno a aktualizovat hlavní
+            // UKONČENÍ: Skrýt malé okno a aktualizovat tabulku v hlavním okně
             let _ = slint::invoke_from_event_loop(move || {
-                let _ = thread_pw.unwrap().hide(); 
-                aktualizuj_stav_db(&thread_mw.unwrap());
+                if let Some(pw) = thread_pw.upgrade() { let _ = pw.hide(); }
+                if let Some(mw) = thread_mw.upgrade() {
+                    aktualizuj_stav_db(&mw);
+                    obnov_tabulku_partneru(&mw);
+                }
             });
         });
     });
@@ -201,4 +199,38 @@ fn uloz_konfiguraci(cfg: Config) {
     if let Ok(json) = serde_json::to_string_pretty(&cfg) {
         let _ = fs::write("nastaveni.json", json);
     }
+}
+
+fn obnov_tabulku_partneru(ui: &AppWindow) {
+    let ui_handle = ui.as_weak();
+
+    thread::spawn(move || {
+        // 1. TĚŽKÁ PRÁCE NA POZADÍ (Načtení a parsování 14k záznamů)
+        if let Ok(data) = fs::read_to_string("partneri.json") {
+            if let Ok(db) = serde_json::from_str::<Databaze>(&data) {
+                
+                // Připravíme si čistý vektor dat (tohle je Send, takže to může cestovat)
+                let raw_data: Vec<PartnerData> = db.partneri.into_iter().map(|p| {
+                    PartnerData {
+                        id: p.id.into(),
+                        nazev: p.nazev.into(),
+                        slozka: p.slozka.clone().into(),
+                        aktualizovano: p.aktualizovano.into(),
+                        ma_slozku: !p.slozka.is_empty(),
+                    }
+                }).collect();
+
+                // 2. PŘEPNUTÍ DO HLAVNÍHO VLÁKNA
+                let _ = slint::invoke_from_event_loop(move || {
+                    // Tady už jsme v UI vlákně. Tady vytvoříme Model.
+                    // Vytvoření modelu z hotového vektoru je bleskové (O(1)).
+                    let model = std::rc::Rc::new(slint::VecModel::from(raw_data));
+                    
+                    if let Some(ui) = ui_handle.upgrade() {
+                        ui.set_model_partneru(model.into());
+                    }
+                });
+            }
+        }
+    });
 }

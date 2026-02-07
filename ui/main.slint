@@ -1,4 +1,12 @@
-import { Button, VerticalBox, HorizontalBox, LineEdit, ScrollView } from "std-widgets.slint";
+import { Button, VerticalBox, HorizontalBox, LineEdit, ScrollView, ListView } from "std-widgets.slint";
+
+struct PartnerData {
+    id: string,
+    nazev: string,
+    slozka: string,
+    aktualizovano: string,
+    ma_slozku: bool, // Pro vizuální barvu puntíku
+}
 
 // 1. KOMPONENTA TLAČÍTKA
 component MenuButton inherits Rectangle {
@@ -59,12 +67,13 @@ export component ProgressWindow inherits Window {
 
 // 3. HLAVNÍ OKNO APLIKACE (Bez progress logiky)
 export component AppWindow inherits Window {
-    in-out property <string> verze_aplikace: "0.3.0";
+    in-out property <string> verze_aplikace: "0.3.1";
     in-out property <string> cesta_archiv: "";
     in-out property <string> cesta_vyroba: "";
     in-out property <string> posledni_sync_cas: "Nikdy";
     in-out property <bool> databaze_ok: false;
     in-out property <string> stav_text: "DATABÁZE NENÍ NAČTENA";
+    in-out property <[PartnerData]> model_partneru: [];
 
     property <int> vybrana_stranka: 0; 
     property <int> settings_tab: 0;
@@ -166,11 +175,131 @@ export component AppWindow inherits Window {
 
                     if (settings_tab == 2) : VerticalLayout {
                         vertical-stretch: 1;
-                        Text { text: "Zde bude seznam obchodních partnerů..."; color: gray; }
-                        Rectangle { vertical-stretch: 1; }
+                        spacing: 15px;
+                        padding-top: 10px;
+
+                        // 1. HORNÍ INFO PANELY (Statistiky)
+                        HorizontalLayout {
+                            height: 60px;
+                            spacing: 15px;
+        
+                            // Karta: Celkem
+                            Rectangle {
+                                background: #252525; border-radius: 8px;
+                                HorizontalLayout {
+                                    padding: 15px; spacing: 15px;
+                                    Text { text: "👥"; font-size: 20px; vertical-alignment: center; }
+                                    VerticalLayout {
+                                        alignment: center;
+                                        Text { text: "Celkem partnerů"; color: #888; font-size: 11px; }
+                                        Text { text: "254"; color: white; font-size: 16px; font-weight: 700; }
+                                    }
+                                }
+                            }
+        
+                            // Karta: Chybějící složky
+                            Rectangle {
+                                background: #252525; border-radius: 8px;
+                                HorizontalLayout {
+                                    padding: 15px; spacing: 15px;
+                                    Text { text: "📁"; font-size: 20px; vertical-alignment: center; }
+                                    VerticalLayout {
+                                        alignment: center;
+                                        Text { text: "Chybí složka"; color: #888; font-size: 11px; }
+                                        Text { text: "12"; color: #e74c3c; font-size: 16px; font-weight: 700; }
+                                    }
+                                }
+                            }
+        
+                            // Vyhledávací lišta (zabere zbytek místa)
+                            Rectangle {
+                                background: #2e2e2e; border-radius: 8px;
+                                horizontal-stretch: 1;
+                                HorizontalLayout {
+                                    padding-left: 15px; padding-right: 15px;
+                                    Text { text: "🔍"; vertical-alignment: center; }
+                                    LineEdit { 
+                                        placeholder-text: "Hledat podle názvu nebo ID partnera..."; 
+                                        font-size: 14px;
+                                    }
+                                }
+                            }
+                        }
+
+                        // 2. HLAVIČKA TABULKY (Pevná)
+                        Rectangle {
+                        height: 40px; background: #2a2a2a; border-radius: 6px;
+                         HorizontalLayout {
+                            padding-left: 20px; padding-right: 20px;
+                            Text { text: "STAV"; width: 80px; color: #666; font-size: 11px; font-weight: 800; vertical-alignment: center; }
+                            Text { text: "ID"; width: 100px; color: #666; font-size: 11px; font-weight: 800; vertical-alignment: center; }
+                            Text { text: "NÁZEV PARTNERA"; width: 300px; color: #666; font-size: 11px; font-weight: 800; vertical-alignment: center; }
+                            Text { text: "PŘIŘAZENÁ SLOŽKA"; color: #666; font-size: 11px; font-weight: 800; vertical-alignment: center; }
+                            Text { text: "AKCE"; width: 100px; color: #666; font-size: 11px; font-weight: 800; vertical-alignment: center; horizontal-alignment: center; }
+                            }
+                        }
+
+                        // 3. SEZNAM DAT (Optimalizováno pro 14 000+ položek)
+                        ListView {
+                            for partner in root.model_partneru : Rectangle {
+                                height: 50px; // Důležité: ListView musí znát výšku řádku
+                                background: row-touch.has-hover ? #252525 : #1e1e1e; // Hover efekt
+                                border-radius: 6px;
+        
+                                row-touch := TouchArea {}
+
+                                HorizontalLayout {
+                                    padding-left: 20px; padding-right: 20px;
+            
+                                    // 1. Indikátor stavu (Puntík)
+                                    Rectangle { 
+                                        width: 60px; 
+                                        VerticalLayout {
+                                            alignment: center;
+                                            Rectangle { 
+                                                width: 12px; height: 12px; border-radius: 6px; 
+                                                background: partner.ma-slozku ? #2CC985 : #e74c3c; 
+                                            }
+                                        }
+                                    }
+
+                                    // 2. ID
+                                    Text { 
+                                        text: partner.id; width: 100px; 
+                                        color: #aaa; vertical-alignment: center; 
+                                    }
+
+                                    // 3. Název
+                                    Text { 
+                                        text: partner.nazev; width: 300px; 
+                                        color: white; font-weight: 600; vertical-alignment: center; 
+                                        overflow: elide;
+                                    }
+            
+                                    // 4. Cesta (zkrácená)
+                                    Text { 
+                                        text: partner.slozka == "" ? "--- nepřiřazeno ---" : partner.slozka; 
+                                        color: partner.slozka == "" ? #444 : #888; 
+                                        font-size: 13px; vertical-alignment: center; 
+                                        overflow: elide; // Přidá "..." pokud je text dlouhý
+                                        horizontal-stretch: 1; // Zabere zbytek místa
+                                    }
+
+                                    // 5. Tlačítko akce
+                                    Rectangle {
+                                        width: 100px;
+                                        VerticalLayout {
+                                            alignment: center;
+                                            Button { text: "Detail"; width: 80px; height: 30px; }
+                                        }
+                                    }
+                                }
+                             }
+                        }
                     }
                 }
             }
         }
     }
 }
+
