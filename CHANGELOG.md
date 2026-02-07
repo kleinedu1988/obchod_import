@@ -1,3 +1,9 @@
+## [0.3.3] - 2026-02-07
+### Opraveno
+- **Struktura layoutu:** Kompletní rekonstrukce pravého panelu. Odstraněno nesprávné vnořování do statických kontejnerů, které způsobovalo kolaps `ListView`.
+- **UI Scaling:** Implementována správná kaskáda `vertical-stretch`. Seznam partnerů se nyní dynamicky roztahuje přes celou dostupnou plochu okna.
+- **Syntaktické opravy:** Paddingy u vyhledávání a tabulky byly přepsány z neplatného CSS formátu na nativní Slint syntaxi (`padding-left`, `padding-right`), což vyřešilo chyby při kompilaci.
+
 ## [0.3.2] - 2026-02-07
 ### Opraveno
 - **Logika statistik:** Opraven výpočet "Chybějící složka" v Rustu. Nyní se dynamicky vypočítává jako `Celkový počet - Počet přiřazených`, což zajišťuje přesnost i při 14 000+ záznamech.
