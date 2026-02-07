@@ -1,0 +1,125 @@
+import { VerticalBox, HorizontalBox, LineEdit, ScrollView } from "std-widgets.slint";
+
+// KOMPONENT PRO TLAČÍTKO: Robustní design, text vlevo
+component MenuButton inherits Rectangle {
+    in-out property<string> text;
+    in-out property<bool> active;
+    callback clicked;
+    
+    height: 50px;
+    background: active ? #2CC985 : touch.has-hover ? #3d3d3d : #2e2e2e;
+    border-radius: 7px;
+    border-width: 1px;
+    border-color: active ? #2CC985 : #3f3f3f;
+
+    touch := TouchArea {
+        clicked => { root.clicked(); }
+    }
+
+    HorizontalLayout {
+        padding-left: 20px;
+        spacing: 12px;
+        
+        Text {
+            text: root.text;
+            color: root.active ? #1A1A1A : white;
+            vertical-alignment: center;
+            horizontal-alignment: left;
+            font-size: 14px;
+            font-weight: root.active ? 800 : 500;
+        }
+    }
+}
+
+export component AppWindow inherits Window {
+    title: "MRB Obchodník - v0.1.0"; 
+    
+    // OPRAVA ROZMĚRŮ: Používáme preferred místo width/height pro odblokování resize
+    min-width: 800px;
+    min-height: 600px;
+    preferred-width: 1000px;
+    preferred-height: 700px;
+
+    background: #1A1A1A;
+    property <int> vybrana_stranka: 0;
+
+    HorizontalBox {
+        padding: 0;
+        spacing: 0;
+
+        // --- LEVÝ NAVIGAČNÍ PANEL ---
+        Rectangle {
+            width: 280px;
+            background: #212121;
+            
+            VerticalBox {
+                padding: 25px;
+                alignment: start;
+                spacing: 12px;
+
+                // NÁZEV APLIKACE (Opraveno centrování bez padding-bottom)
+                Text {
+                    text: "MRB Obchodník";
+                    color: #2CC985;
+                    font-size: 20px;
+                    font-weight: 900;
+                    horizontal-alignment: center;
+                }
+                
+                // Malá mezera místo nefunkčního paddingu
+                Rectangle { height: 15px; }
+
+                MenuButton { 
+                    text: "🏠  Domovská obrazovka"; 
+                    active: vybrana_stranka == 0;
+                    clicked => { vybrana_stranka = 0; }
+                }
+                MenuButton { 
+                    text: "📂  Nový import"; 
+                    active: vybrana_stranka == 1;
+                    clicked => { vybrana_stranka = 1; }
+                }
+                MenuButton { 
+                    text: "⚙  Nastavení systému"; 
+                    active: vybrana_stranka == 2;
+                    clicked => { vybrana_stranka = 2; }
+                }
+
+                Rectangle {} // Pružina (Spacer)
+
+                Text {
+                    text: "v0.1.0-rust";
+                    color: #444;
+                    horizontal-alignment: center;
+                }
+            }
+        }
+
+        // --- PRAVÁ ČÁST (Obsah) ---
+        Rectangle {
+            background: #1A1A1A;
+            
+            VerticalBox {
+                padding: 40px;
+                alignment: center;
+
+                Text {
+                    text: vybrana_stranka == 0 ? "Vítejte v systému" : 
+                          vybrana_stranka == 1 ? "Import zakázek" : 
+                          "Nastavení aplikace";
+                    font-size: 34px;
+                    font-weight: 800;
+                    color: white;
+                }
+                
+                // Malá mezera místo paddingu
+                Rectangle { height: 10px; }
+
+                Text {
+                    text: "Nyní můžete okno libovolně zvětšovat i maximalizovat.";
+                    color: #666;
+                }
+            }
+        }
+    }
+}
