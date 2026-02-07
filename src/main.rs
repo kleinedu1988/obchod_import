@@ -1,48 +1,79 @@
-// Magické makro, které propojí .slint soubor s Rustem
+use serde::{Deserialize, Serialize};
+use std::fs;
+use slint::ComponentHandle; // Důležité pro práci s oknem
+
 slint::include_modules!();
+
+// Definujeme strukturu dat pro JSON soubor
+// "Derive" znamená, že Rust automaticky pochopí, jak to převést na text
+#[derive(Serialize, Deserialize)]
+struct Nastaveni {
+    archiv: String,
+    vyroba: String,
+}
 
 fn main() -> Result<(), slint::PlatformError> {
     let ui = AppWindow::new()?;
-
-    // --- AUTOMATICKÉ NAČTENÍ VERZE Z CARGO.TOML ---
-    // env!("CARGO_PKG_VERSION") vytáhne to číslo (např. "0.1.1") přímo při kompilaci
-    let verze = env!("CARGO_PKG_VERSION");
-    ui.set_verze_aplikace(verze.into()); // Pošleme to do Slintu
-
     let ui_weak = ui.as_weak();
 
-    // --- LOGIKA PRO VÝBĚR ARCHIVU ---
-    let ui_copy = ui_weak.clone();
+    // 1. NAČTENÍ VERZE APLIKACE (z Cargo.toml)
+    let verze = env!("CARGO_PKG_VERSION");
+    ui.set_verze_aplikace(verze.into());
+
+    // 2. NAČTENÍ ULOŽENÉHO NASTAVENÍ PŘI STARTU
+    // Zkusíme najít soubor "nastaveni.json"
+    if let Ok(obsah_souboru) = fs::read_to_string("nastaveni.json") {
+        // Pokud existuje, převedeme ho zpět na data
+        if let Ok(nactena_data) = serde_json::from_str::<Nastaveni>(&obsah_souboru) {
+            println!("Načítám nastavení: Archiv={}, Výroba={}", nactena_data.archiv, nactena_data.vyroba);
+            ui.set_cesta_archiv(nactena_data.archiv.into());
+            ui.set_cesta_vyroba(nactena_data.vyroba.into());
+        }
+    } else {
+        println!("Soubor nastaveni.json nenalezen, začínáme s čistým štítem.");
+    }
+
+    // 3. LOGIKA PRO TLAČÍTKA "PROCHÁZET"
+    let ui_arch = ui_weak.clone();
     ui.on_vybrat_archiv(move || {
-        // Otevřeme nativní dialog pro výběr složky
-        if let Some(folder) = rfd::FileDialog::new()
-            .set_title("Vyberte složku s archivem dat")
-            .pick_folder() 
-        {
-            // Pokud uživatel složku vybral, získáme cestu jako text
-            let cesta = folder.to_string_lossy().to_string();
-            
-            // "Rozbalíme" okno ze slabého odkazu a pošleme do něj cestu
-            if let Some(ui) = ui_copy.upgrade() {
-                ui.set_cesta_archiv(cesta.into());
-            }
+        let ui = ui_arch.unwrap();
+        if let Some(folder) = rfd::FileDialog::new().set_title("Vyber složku s archivem").pick_folder() {
+            ui.set_cesta_archiv(folder.to_string_lossy().to_string().into());
         }
     });
 
-    // --- LOGIKA PRO VÝBĚR VÝROBY ---
-    let ui_copy = ui_weak.clone();
+    let ui_vyr = ui_weak.clone();
     ui.on_vybrat_vyrobu(move || {
-        if let Some(folder) = rfd::FileDialog::new()
-            .set_title("Vyberte cílovou složku pro výrobu")
-            .pick_folder() 
-        {
-            let cesta = folder.to_string_lossy().to_string();
-            if let Some(ui) = ui_copy.upgrade() {
-                ui.set_cesta_vyroba(cesta.into());
-            }
+        let ui = ui_vyr.unwrap();
+        if let Some(folder) = rfd::FileDialog::new().set_title("Vyber složku pro výrobu").pick_folder() {
+            ui.set_cesta_vyroba(folder.to_string_lossy().to_string().into());
         }
     });
 
-    // Spuštění aplikace
+    // 4. LOGIKA PRO TLAČÍTKO "ULOŽIT"
+    let ui_save = ui_weak.clone();
+    ui.on_ulozit_nastaveni(move || {
+        let ui = ui_save.unwrap();
+        
+        // Vytáhneme aktuální text z kolonek v okně
+        let data = Nastaveni {
+            archiv: ui.get_cesta_archiv().to_string(),
+            vyroba: ui.get_cesta_vyroba().to_string(),
+        };
+
+        // Převedeme data na hezký JSON text
+        match serde_json::to_string_pretty(&data) {
+            Ok(json_text) => {
+                // Zapíšeme do souboru
+                if let Err(e) = fs::write("nastaveni.json", json_text) {
+                    eprintln!("Chyba při zápisu souboru: {}", e);
+                } else {
+                    println!("Nastavení úspěšně uloženo!");
+                }
+            },
+            Err(e) => eprintln!("Chyba při převodu dat: {}", e),
+        }
+    });
+
     ui.run()
 }
