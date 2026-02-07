@@ -1,19 +1,13 @@
 import { Button, VerticalBox, HorizontalBox, LineEdit, ScrollView } from "std-widgets.slint";
 
-// 1. KOMPONENTA TLAČÍTKA MENU
 component MenuButton inherits Rectangle {
     in-out property<string> text;
     in-out property<bool> active;
     callback clicked;
-    
     height: 45px;
     background: active ? #2CC985 : touch.has-hover ? #3d3d3d : #2e2e2e;
     border-radius: 6px;
-    border-width: 1px;
-    border-color: active ? #2CC985 : #3f3f3f;
-
     touch := TouchArea { clicked => { root.clicked(); } }
-
     HorizontalLayout {
         padding-left: 20px;
         Text {
@@ -21,147 +15,122 @@ component MenuButton inherits Rectangle {
             color: root.active ? #1A1A1A : white;
             vertical-alignment: center;
             font-size: 14px;
-            font-weight: root.active ? 800 : 500;
         }
     }
 }
 
-// 2. HLAVNÍ OKNO APLIKACE
 export component AppWindow inherits Window {
     in-out property <string> verze_aplikace: "0.0.0";
     in-out property <string> cesta_archiv: "";
     in-out property <string> cesta_vyroba: "";
-    
-    property <int> vybrana_stranka: 0; 
+    property <int> vybrana_stranka: 2; 
     property <int> settings_tab: 0;
 
     callback vybrat_archiv();
     callback vybrat_vyrobu();
     callback ulozit_nastaveni();
+    callback spustit_synchronizaci();
 
     title: "MRB Obchodník - v" + verze_aplikace;
-    min-width: 900px; 
-    min-height: 650px;
+    min-width: 900px; min-height: 650px;
     background: #1A1A1A;
 
     HorizontalLayout {
-        padding: 0; spacing: 0;
-
-        // --- LEVÝ PANEL (Navigace) ---
+        // --- LEVÝ PANEL ---
         Rectangle {
-            width: 280px;
-            background: #212121;
-            
+            width: 280px; background: #212121;
             VerticalLayout {
-                padding: 25px; 
-                spacing: 10px;
-
-                Text { 
-                    text: "MRB Obchodník"; 
-                    color: #2CC985; font-size: 20px; font-weight: 900; 
-                    horizontal-alignment: center; 
-                }
-                
+                padding: 25px; spacing: 10px;
+                Text { text: "MRB Obchodník"; color: #2CC985; font-size: 20px; font-weight: 900; horizontal-alignment: center; }
                 Rectangle { height: 20px; }
-
                 MenuButton { text: "🏠  Domovská obrazovka"; active: vybrana_stranka == 0; clicked => { vybrana_stranka = 0; } }
                 MenuButton { text: "📂  Nový import"; active: vybrana_stranka == 1; clicked => { vybrana_stranka = 1; } }
                 MenuButton { text: "⚙  Nastavení systému"; active: vybrana_stranka == 2; clicked => { vybrana_stranka = 2; } }
-
-                // Pružina panelu (tlačí verzi dolů)
                 Rectangle { vertical-stretch: 1; }
-
-                Text { 
-                    text: "v" + root.verze_aplikace; 
-                    color: #555; font-size: 11px; 
-                    horizontal-alignment: center; 
-                }
+                Text { text: "v" + root.verze_aplikace; color: #555; font-size: 11px; horizontal-alignment: center; }
             }
         }
 
-        // --- PRAVÝ OBSAH (Stránky) ---
-        Rectangle {
-            background: #1A1A1A;
-            
-            // 1. DOMOVSKÁ STRÁNKA
-            if (vybrana_stranka == 0) : VerticalBox {
-                alignment: center; spacing: 20px;
-                Text { text: "🏠"; font-size: 60px; horizontal-alignment: center; }
-                Text { text: "Vítejte v systému"; font-size: 30px; font-weight: 800; color: white; horizontal-alignment: center; }
+        // --- PRAVÝ OBSAH ---
+        VerticalLayout {
+            padding: 40px;
+            spacing: 20px;
+
+            // 1. PŘEPÍNAČE NASTAVENÍ (zobrazí se jen v sekci Nastavení)
+            if (vybrana_stranka == 2) : HorizontalLayout {
+                height: 45px; spacing: 10px;
+                Button { text: "Cesty"; primary: settings_tab == 0; clicked => { settings_tab = 0; } }
+                Button { text: "Synchronizace"; primary: settings_tab == 1; clicked => { settings_tab = 1; } }
+                Button { text: "Správce dat"; primary: settings_tab == 2; clicked => { settings_tab = 2; } }
             }
 
-            // 2. NOVÝ IMPORT
-            if (vybrana_stranka == 1) : VerticalBox {
-                alignment: center;
-                Text { text: "🚧"; font-size: 60px; horizontal-alignment: center; }
-                Text { text: "Sekce Import"; font-size: 24px; color: white; horizontal-alignment: center; }
-            }
-
-            // 3. NASTAVENÍ
-            if (vybrana_stranka == 2) : VerticalLayout {
-                padding: 40px; spacing: 20px;
+            // 2. DYNAMICKÝ OBSAH ZÁLOŽEK
+            // --- CESTY ---
+            if (vybrana_stranka == 2 && settings_tab == 0) : VerticalLayout {
+                vertical-stretch: 1;
+                spacing: 20px;
+                Text { text: "CESTA K ARCHIVU"; color: #888; font-size: 11px; font-weight: 700; }
+                HorizontalLayout {
+                    spacing: 10px; height: 40px;
+                    LineEdit { text: cesta_archiv; } // Opraveno: vertical-alignment smazáno
+                    Button { text: "Procházet"; width: 100px; clicked => { root.vybrat_archiv(); } }
+                }
+                Text { text: "CESTA PRO VÝROBU"; color: #888; font-size: 11px; font-weight: 700; }
+                HorizontalLayout {
+                    spacing: 10px; height: 40px;
+                    LineEdit { text: cesta_vyroba; } // Opraveno: vertical-alignment smazáno
+                    Button { text: "Procházet"; width: 100px; clicked => { root.vybrat_vyrobu(); } }
+                }
                 
-                Text { text: "Nastavení systému"; font-size: 30px; font-weight: 800; color: white; }
-
-                HorizontalBox {
-                    height: 40px; spacing: 10px; padding: 0;
-                    Button { text: "Cesty"; primary: settings_tab == 0; clicked => { settings_tab = 0; } }
-                    Button { text: "Synchronizace"; primary: settings_tab == 1; clicked => { settings_tab = 1; } }
-                    Button { text: "Správce dat"; primary: settings_tab == 2; clicked => { settings_tab = 2; } }
-                }
-
-                // Obal obsahu záložky, který vyplní zbytek okna
-                Rectangle {
-                    vertical-stretch: 1;
-
-                    // OBSAH ZÁLOŽKY: CESTY
-                    if (settings_tab == 0) : VerticalLayout {
-                        spacing: 20px;
-                        
-                        VerticalBox {
-                            spacing: 5px; padding: 0;
-                            Text { text: "CESTA K ARCHIVU"; color: #888; font-size: 11px; font-weight: 700; }
-                            HorizontalBox {
-                                padding: 0;
-                                LineEdit { text: cesta_archiv; placeholder-text: "Vyberte složku..."; height: 40px; }
-                                Button { text: "Procházet"; width: 100px; clicked => { root.vybrat_archiv(); } }
-                            }
-                        }
-
-                        VerticalBox {
-                            spacing: 5px; padding: 0;
-                            Text { text: "CESTA PRO VÝROBU"; color: #888; font-size: 11px; font-weight: 700; }
-                            HorizontalBox {
-                                padding: 0;
-                                LineEdit { text: cesta_vyroba; placeholder-text: "Vyberte složku..."; height: 40px; }
-                                Button { text: "Procházet"; width: 100px; clicked => { root.vybrat_vyrobu(); } }
-                            }
-                        }
-
-                        // PRUŽINA: Tlačí tlačítko "Uložit" dolů (stejně jako u verze)
-                        Rectangle { vertical-stretch: 1; }
-                        
-                        Button { 
-                            text: "ULOŽIT KONFIGURACI"; 
-                            height: 50px; 
-                            primary: true; 
-                            clicked => { root.ulozit_nastaveni(); }
-                        }
-                    }
-
-                    // OBSAH ZÁLOŽKY: SYNC
-                    if (settings_tab == 1) : VerticalLayout {
-                        Text { text: "Zde bude synchronizace databáze..."; color: gray; }
-                        Rectangle { vertical-stretch: 1; }
-                    }
-
-                    // OBSAH ZÁLOŽKY: SPRÁVCE
-                    if (settings_tab == 2) : VerticalLayout {
-                        Text { text: "Zde bude seznam obchodních partnerů..."; color: gray; }
-                        Rectangle { vertical-stretch: 1; }
-                    }
+                Rectangle { vertical-stretch: 1; } // Pružina vytlačí tlačítko dolů
+                
+                Button { 
+                    text: "ULOŽIT KONFIGURACI"; height: 50px; primary: true; 
+                    clicked => { root.ulozit_nastaveni(); } 
                 }
             }
+
+            // --- SYNCHRONIZACE ---
+            if (vybrana_stranka == 2 && settings_tab == 1) : VerticalLayout {
+                vertical-stretch: 1;
+                spacing: 25px;
+                // alignment: start;  <-- TOTO JSME SMAZALI, ABY PRUŽINA FUNGOVALA
+                
+                Text { 
+                    text: "Synchronizace partnerů"; 
+                    font-size: 22px; font-weight: 700; color: white; 
+                    horizontal-alignment: center; 
+                }
+                
+                Rectangle {
+                    border-color: #2CC985; border-width: 2px; border-radius: 10px;
+                    height: 100px;
+                    Text { 
+                        text: "☑ DATABÁZE JE AKTUÁLNÍ"; 
+                        color: #2CC985; font-size: 20px; font-weight: 800; 
+                        horizontal-alignment: center; vertical-alignment: center; 
+                    }
+                }
+
+                VerticalLayout {
+                    spacing: 5px;
+                    Text { text: "Poslední aktualizace proběhla:"; color: #888; font-size: 14px; horizontal-alignment: center; }
+                    Text { text: "Dnes v 14:20"; color: white; font-size: 20px; font-weight: 600; horizontal-alignment: center; }
+                }
+
+                // TA NEJDŮLEŽITĚJŠÍ ČÁST:
+                Rectangle { vertical-stretch: 1; } // Teď už se tahle pružina konečně roztáhne!
+
+                Button { 
+                    text: "NAHRÁT EXCEL A SPUSTIT"; height: 50px; primary: true;
+                    clicked => { root.spustit_synchronizaci(); }
+                }
+            }
+
+            // --- OSTATNÍ STRÁNKY ---
+            if (vybrana_stranka == 0) : VerticalLayout { vertical-stretch: 1; alignment: center; Text { text: "🏠 Domovská obrazovka"; font-size: 30px; horizontal-alignment: center; color: white; } }
+            if (vybrana_stranka == 1) : VerticalLayout { vertical-stretch: 1; alignment: center; Text { text: "📂 Sekce Import"; font-size: 30px; horizontal-alignment: center; color: white; } }
+            if (vybrana_stranka == 2 && settings_tab == 2) : VerticalLayout { vertical-stretch: 1; Text { text: "Zde bude správce dat..."; color: gray; } Rectangle { vertical-stretch: 1; } }
         }
     }
 }
