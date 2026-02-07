@@ -1,3 +1,11 @@
+## [0.3.2] - 2026-02-07
+### Opraveno
+- **Logika statistik:** Opraven výpočet "Chybějící složka" v Rustu. Nyní se dynamicky vypočítává jako `Celkový počet - Počet přiřazených`, což zajišťuje přesnost i při 14 000+ záznamech.
+- **UI Dashboard:** Navrácen `HorizontalLayout` pro karty statistik ve Správci dat (ikona vlevo, čísla vpravo) pro lepší čitelnost.
+
+### Změněno
+- **Data Binding:** Plné propojení statistik v UI (`AppWindow`) s backendovou logikou. Čísla se aktualizují okamžitě po načtení dat nebo importu.
+
 ## [0.3.1] - 2026-02-07
 ### Změněno
 - **Optimalizace renderování:** Přechod z `ScrollView` na `ListView` (UI Virtualizace). Aplikace nyní vykresluje pouze viditelné řádky, což umožňuje plynulý posun i při 14 000+ záznamech.

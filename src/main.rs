@@ -205,11 +205,21 @@ fn obnov_tabulku_partneru(ui: &AppWindow) {
     let ui_handle = ui.as_weak();
 
     thread::spawn(move || {
-        // 1. TĚŽKÁ PRÁCE NA POZADÍ (Načtení a parsování 14k záznamů)
         if let Ok(data) = fs::read_to_string("partneri.json") {
             if let Ok(db) = serde_json::from_str::<Databaze>(&data) {
                 
-                // Připravíme si čistý vektor dat (tohle je Send, takže to může cestovat)
+                // 1. Spočítáme celkový počet
+                let celkem = db.partneri.len() as i32;
+
+                // 2. Spočítáme, kolik jich MÁ složku (není prázdná)
+                let ma_slozku_pocet = db.partneri.iter()
+                    .filter(|p| !p.slozka.trim().is_empty())
+                    .count() as i32;
+
+                // 3. Výpočet chybějících (logika: Celkem - Přiřazeno)
+                let chybi_pocet = celkem - ma_slozku_pocet;
+
+                // Připrava dat pro Slint
                 let raw_data: Vec<PartnerData> = db.partneri.into_iter().map(|p| {
                     PartnerData {
                         id: p.id.into(),
@@ -220,14 +230,13 @@ fn obnov_tabulku_partneru(ui: &AppWindow) {
                     }
                 }).collect();
 
-                // 2. PŘEPNUTÍ DO HLAVNÍHO VLÁKNA
                 let _ = slint::invoke_from_event_loop(move || {
-                    // Tady už jsme v UI vlákně. Tady vytvoříme Model.
-                    // Vytvoření modelu z hotového vektoru je bleskové (O(1)).
                     let model = std::rc::Rc::new(slint::VecModel::from(raw_data));
                     
                     if let Some(ui) = ui_handle.upgrade() {
                         ui.set_model_partneru(model.into());
+                        // Odeslání správného čísla
+                        ui.set_pocet_chybi(chybi_pocet);
                     }
                 });
             }
