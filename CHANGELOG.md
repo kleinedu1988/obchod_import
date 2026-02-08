@@ -1,5 +1,29 @@
-## [0.3.5] – 2026-02-08
 
+## [0.3.6] – 2026-02-08
+### Přidáno
+- **Nezávislé statistiky:**  
+  Přidána vlastnost `pocet_celkem`, díky které zůstává celkový počet partnerů na dashboardu konstantní i při aktivním vyhledávání nebo filtraci dat.
+
+### Změněno
+- **Redesign vstupních polí:**  
+  Komponenty `LineEdit` pro vyhledávání a zápis složky byly nahrazeny nízkoúrovňovým `TextInput`.  
+  Tím byl odstraněn rušivý systémový focus border (modrý pruh) a vstupní pole nyní plně splývají s tmavým vizuálním stylem aplikace.
+
+- **Logika navigace:**  
+  Při kliknutí na **Nastavení systému** v levém panelu se záložky vždy resetují na výchozí **Aktualizace dat**.
+
+- **Sjednocení vizuálu tabulky:**  
+  Zarovnání textů v tabulce bylo sjednoceno. Záhlaví i obsah řádků jsou nyní striktně zarovnány doleva pro lepší čitelnost.
+
+### Opraveno
+- **Projektová hygiena (Rust):**  
+  Odstraněna varování kompilátoru *(unused imports: `ModelRc`, `VecModel`, `Weak` a nadbytečná klíčová slova `mut`)*.  
+  Výsledkem je zcela čistý průběh kompilace bez varování.
+
+- **Lícování tabulky:**  
+  Odstraněny drobné odchylky v odsazení sloupců (`spacing`), které způsobovaly nelícování obsahu řádků se záhlavím tabulky.
+
+## [0.3.5] – 2026-02-08
 ### Přidáno
 - **Inline editace složek:**  
   Název složky partnera lze nyní upravit přímo v tabulce pomocí textového pole.  

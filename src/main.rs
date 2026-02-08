@@ -1,4 +1,5 @@
-use slint::ComponentHandle;
+// MRB Obchodník v0.3.6 - Rust Logic (Full Integration)
+use slint::{ComponentHandle, SharedString};
 use serde::{Deserialize, Serialize};
 use std::{fs, thread};
 use std::collections::HashMap;
@@ -45,7 +46,7 @@ fn main() -> Result<(), slint::PlatformError> {
     let main_window = AppWindow::new()?;
     let progress_window = ProgressWindow::new()?;
 
-    let mut config = nacti_konfiguraci();
+    let config = nacti_konfiguraci();
     main_window.set_cesta_archiv(config.cesta_archiv.clone().into());
     main_window.set_cesta_vyroba(config.cesta_vyroba.clone().into());
     main_window.set_sync_interval(config.interval_synchronizace.clone().into());
@@ -54,40 +55,68 @@ fn main() -> Result<(), slint::PlatformError> {
     aktualizuj_stav_db(&main_window, &config);
     obnov_tabulku_partneru(&main_window);
 
-    // --- CALLBACKY PRO NASTAVENÍ ---
+    // --- CALLBACKY PRO FILTRY (v0.3.6) ---
     
-    let mw_handle = main_window.as_weak();
+    let mw_filter_handle = main_window.as_weak();
+    main_window.on_filter_zmenen(move |index| {
+        if let Some(ui) = mw_filter_handle.upgrade() {
+            ui.set_aktivni_filtr(index);
+            // Pokud se přepne na kartu, vymaže se text hledání
+            if index != 2 {
+                ui.set_search_text(SharedString::from(""));
+            }
+            obnov_tabulku_partneru(&ui);
+        }
+    });
+
+    let mw_search_handle = main_window.as_weak();
+    main_window.on_search_changed(move |text| {
+        if let Some(ui) = mw_search_handle.upgrade() {
+            ui.set_search_text(text.clone());
+            if !text.is_empty() {
+                ui.set_aktivni_filtr(2);
+            } else {
+                ui.set_aktivni_filtr(0); // Návrat na Celkem při smazání
+            }
+            obnov_tabulku_partneru(&ui);
+        }
+    });
+
+    // --- CALLBACKY PRO NASTAVENÍ A CESTY ---
+    
+    let mw_archiv_handle = main_window.as_weak();
     main_window.on_vybrat_archiv(move || {
         if let Some(folder) = rfd::FileDialog::new().pick_folder() {
-            let _ = mw_handle.upgrade().map(|ui| ui.set_cesta_archiv(folder.to_string_lossy().to_string().into()));
+            let _ = mw_archiv_handle.upgrade().map(|ui| ui.set_cesta_archiv(folder.to_string_lossy().to_string().into()));
         }
     });
 
-    let mw_handle = main_window.as_weak();
+    let mw_vyroba_handle = main_window.as_weak();
     main_window.on_vybrat_vyrobu(move || {
         if let Some(folder) = rfd::FileDialog::new().pick_folder() {
-            let _ = mw_handle.upgrade().map(|ui| ui.set_cesta_vyroba(folder.to_string_lossy().to_string().into()));
+            let _ = mw_vyroba_handle.upgrade().map(|ui| ui.set_cesta_vyroba(folder.to_string_lossy().to_string().into()));
         }
     });
 
-    let mw_handle = main_window.as_weak();
+    let mw_save_handle = main_window.as_weak();
     main_window.on_ulozit_nastaveni(move || {
-        if let Some(ui) = mw_handle.upgrade() {
-            config.cesta_archiv = ui.get_cesta_archiv().to_string();
-            config.cesta_vyroba = ui.get_cesta_vyroba().to_string();
-            config.interval_synchronizace = ui.get_sync_interval().to_string();
-            
-            uloz_konfiguraci(config.clone());
-            aktualizuj_stav_db(&ui, &config);
+        if let Some(ui) = mw_save_handle.upgrade() {
+            let nova_config = Config {
+                cesta_archiv: ui.get_cesta_archiv().to_string(),
+                cesta_vyroba: ui.get_cesta_vyroba().to_string(),
+                interval_synchronizace: ui.get_sync_interval().to_string(),
+            };
+            uloz_konfiguraci(nova_config.clone());
+            aktualizuj_stav_db(&ui, &nova_config);
             obnov_tabulku_partneru(&ui);
         }
     });
 
     // --- EDITACE NÁZVU SLOŽKY ---
 
-    let mw_handle = main_window.as_weak();
+    let mw_edit_handle = main_window.as_weak();
     main_window.on_ulozit_nazev_slozky(move |partner_id, novy_nazev| {
-        let ui = mw_handle.upgrade().unwrap();
+        let ui = mw_edit_handle.upgrade().unwrap();
         let p_id = partner_id.to_string();
         let n_val = novy_nazev.to_string();
 
@@ -107,8 +136,8 @@ fn main() -> Result<(), slint::PlatformError> {
 
     // --- HLAVNÍ LOGIKA SYNCHRONIZACE ---
     
-    let mw_handle = main_window.as_weak();
-    let pw_handle = progress_window.as_weak();
+    let mw_sync_handle = main_window.as_weak();
+    let pw_sync_handle = progress_window.as_weak();
 
     main_window.on_spustit_synchronizaci(move || {
         let file_path = match rfd::FileDialog::new()
@@ -118,15 +147,15 @@ fn main() -> Result<(), slint::PlatformError> {
                 None => return,
             };
 
-        if let Some(progress_ui) = pw_handle.upgrade() {
+        if let Some(progress_ui) = pw_sync_handle.upgrade() {
             progress_ui.set_progress(0.0);
             progress_ui.set_status("Načítám Excel...".into());
             let _ = progress_ui.show();
         }
 
         let path_to_process = file_path.to_string_lossy().to_string();
-        let thread_pw = pw_handle.clone();
-        let thread_mw = mw_handle.clone();
+        let thread_pw = pw_sync_handle.clone();
+        let thread_mw = mw_sync_handle.clone();
 
         thread::spawn(move || {
             let mut partneri_map: HashMap<String, Partner> = HashMap::new();
@@ -148,16 +177,20 @@ fn main() -> Result<(), slint::PlatformError> {
 
                         if !id.is_empty() {
                             let ted = Local::now().format("%d.%m.%Y %H:%M").to_string();
-                            if let Some(p) = partneri_map.get_mut(&id) {
-                                if p.nazev != nazev { 
-                                    p.nazev = nazev; 
-                                    p.aktualizovano = ted; 
+                            let id_clone = id.clone();
+                            let nazev_clone = nazev.clone();
+                            
+                            partneri_map.entry(id_clone).and_modify(|p| {
+                                if p.nazev != nazev_clone {
+                                    p.nazev = nazev_clone;
+                                    p.aktualizovano = ted.clone();
                                 }
-                            } else {
-                                partneri_map.insert(id.clone(), Partner {
-                                    id, nazev, slozka: String::new(), aktualizovano: ted,
-                                });
-                            }
+                            }).or_insert(Partner {
+                                id,
+                                nazev,
+                                slozka: String::new(),
+                                aktualizovano: ted,
+                            });
                         }
 
                         if idx % 10 == 0 {
@@ -246,16 +279,16 @@ fn uloz_konfiguraci(cfg: Config) {
 fn obnov_tabulku_partneru(ui: &AppWindow) {
     let ui_handle = ui.as_weak();
     let config = nacti_konfiguraci();
+    let filtr_index = ui.get_aktivni_filtr();
+    let hledany_text = ui.get_search_text().to_lowercase();
 
     thread::spawn(move || {
         if let Ok(data) = fs::read_to_string("partneri.json") {
             if let Ok(db) = serde_json::from_str::<Databaze>(&data) {
-                let celkem = db.partneri.len() as i32;
+                let celkem_partneru = db.partneri.len() as i32;
                 
-                let mut raw_data: Vec<PartnerData> = db.partneri.into_iter().map(|p| {
+                let raw_data: Vec<PartnerData> = db.partneri.into_iter().map(|p| {
                     let has_name = !p.slozka.trim().is_empty();
-                    
-                    // Kontrola fyzické existence POUZE v cestě k ARCHIVU
                     let mut exists_in_archive = false;
                     if has_name {
                         let path_arch = Path::new(&config.cesta_archiv).join(&p.slozka);
@@ -272,13 +305,30 @@ fn obnov_tabulku_partneru(ui: &AppWindow) {
                 }).collect();
                 
                 let ma_slozku_pocet = raw_data.iter().filter(|p| p.ma_slozku).count() as i32;
-                raw_data.sort_by(|a, b| a.id.cmp(&b.id));
+                let pocet_problemu = celkem_partneru - ma_slozku_pocet;
+
+                // --- FILTRACE ---
+                let mut filtrovana_data: Vec<PartnerData> = raw_data.into_iter().filter(|p| {
+                    match filtr_index {
+                        0 => true, // Celkem
+                        1 => !p.ma_slozku, // Problém se složkou
+                        2 => { // Hledání (ignoruje stav složky)
+                            p.nazev.to_lowercase().contains(&hledany_text) || 
+                            p.id.to_lowercase().contains(&hledany_text)
+                        },
+                        _ => true,
+                    }
+                }).collect();
+
+                filtrovana_data.sort_by(|a, b| a.id.cmp(&b.id));
 
                 let _ = slint::invoke_from_event_loop(move || {
-                    let model = std::rc::Rc::new(slint::VecModel::from(raw_data));
                     if let Some(ui) = ui_handle.upgrade() {
+                        let model = std::rc::Rc::new(slint::VecModel::from(filtrovana_data));
                         ui.set_model_partneru(model.into());
-                        ui.set_pocet_chybi(celkem - ma_slozku_pocet);
+                        // Statistiky posíláme vždy kompletní
+                        ui.set_pocet_chybi(pocet_problemu);
+                        ui.set_pocet_celkem(celkem_partneru); // Aktualizuje statickou hodnotu celku
                     }
                 });
             }
