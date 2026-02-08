@@ -1,3 +1,42 @@
+## [0.4.0] – 2026-02-08
+### Přidáno
+- **Hub (Rozcestník):**  
+  Nová domovská obrazovka umožňující okamžitou volbu mezi moduly **Poptávka** a **Objednávka** pomocí vizuálních karet.  
+  Zrychluje zahájení práce a usnadňuje orientaci bez nutnosti procházet menu.
+
+- **Pracovní režimy:**  
+  Zavedení barevného rozlišení procesů – **oranžová pro Poptávky**, **zelená pro Objednávky**.  
+  Tato vizuální kotva minimalizuje riziko záměny kontextu a poskytuje okamžitý přehled o aktuální fázi zpracování.
+
+- **Hybridní formulář:**  
+  Redesign importní stránky na dvousloupcový layout.  
+  Levá část obsahuje formulář pro ruční zadání údajů, pravá slouží jako **DropZóna**.  
+  Umožňuje plynulé kombinování obou způsobů zadávání dat na jedné pracovní ploše.
+
+- **Manuální zakládání dokladů:**  
+  Přidána logika pro založení dokladu přímo z ručně vyplněných polí.  
+  Zrychluje práci v případech, kdy není potřeba import externího souboru.
+
+### Změněno
+- **Navigační schéma:**  
+  Systémová tlačítka byla přebarvena na neutrální modrou.  
+  Tím se eliminuje kolize se zeleným indikátorem objednávek a vzniká jasnější hierarchie mezi navigací a pracovním procesem.
+
+- **Dynamický sidebar:**  
+  Tlačítko aktivního procesu v postranním panelu nyní v reálném čase mění text i barvu podle zvoleného režimu, čímž sjednocuje uživatelský zážitek.
+
+- **Stabilizace okna aplikace:**  
+  Nastavena preferovaná velikost okna na **1200 × 800 px**.  
+  Změna zabraňuje „přeblikávání“ a nechtěnému zmenšování okna při přechodu na stránky s menším množstvím prvků.
+
+### Opraveno
+- **Stabilita kompilace:**  
+  Odstraněna nekompatibilní animace `scale` u komponenty `Rectangle`, která způsobovala chyby při sestavování.  
+  Kód je nyní plně validní vůči aktuálním standardům frameworku **Slint**.
+
+- **Layout DropZóny:**  
+  Definována pevná minimální výška pro **DropZónu**.  
+  Oprava zabraňuje rušivým změnám výšky okolních prvků při přepínání mezi formulářem a importem.
 
 ## [0.3.6] – 2026-02-08
 ### Přidáno

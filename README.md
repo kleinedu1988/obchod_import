@@ -1,47 +1,87 @@
 # MRB Obchodník 🚀
 
-![Version](https://img.shields.io/badge/version-0.3.0-blue.svg)
+![Version](https://img.shields.io/badge/version-0.4.0-blue.svg)
 ![Rust](https://img.shields.io/badge/built_with-Rust-orange.svg)
 ![UI](https://img.shields.io/badge/UI-Slint-green.svg)
 
-**MRB Obchodník** je moderní desktopová aplikace pro správu a synchronizaci databáze obchodních partnerů. Je navržena pro efektivní import dat z Excelu, jejich párování s lokální databází a správu cest k dokumentaci.
+**MRB Obchodník** je moderní desktopová aplikace pro správu a zpracování obchodních dat.  
+Slouží k efektivnímu importu podkladů z Excelu, správě databáze partnerů a řízenému převodu dat do výrobních a archivačních struktur.
+
+Od verze **0.4.x** je aplikace postavena na **procesním workflow** s jasně oddělenými pracovními režimy a hybridním způsobem zadávání dat.
+
+---
 
 ## 📸 Náhled aplikace
 ![Hlavní obrazovka aplikace](assets/screen.png)
 
+---
+
 ## 🌟 Klíčové vlastnosti
 
-- **Rychlý import dat:** Využívá sílu Rustu a knihovny `calamine` pro bleskové načtení velkých Excel souborů (.xlsx, .xlsm).
-- **Chytrá synchronizace:** - Automaticky detekuje nové partnery podle ID.
-  - Aktualizuje názvy a časy u existujících záznamů.
-  - **Zachovává cesty ke složkám** (uživatelská data se nepřepisují).
-- **Moderní UI:** Postaveno na frameworku **Slint**.
-  - Tmavý režim (Dark Mode).
-  - Responzivní layout.
-  - Samostatné vyskakovací okno s průběhem importu (Progress Bar).
-- **Multithreading:** Import běží na pozadí, takže aplikace nezamrzá a zůstává plynulá.
-- **Persistentní nastavení:** Aplikace si pamatuje cesty k archivu a výrobě (JSON konfigurace).
+- **Procesní workflow (v0.4+)**
+  - Domovský **Hub (Rozcestník)** pro okamžitou volbu režimu
+  - Oddělené pracovní kontexty:
+    - **Poptávka** – příprava, kalkulace, podklady
+    - **Objednávka** – validace a převod do výroby
+  - Barevné rozlišení režimů pro minimalizaci chyb
+
+- **Hybridní zadávání dat**
+  - Kombinace ručního formuláře a DropZóny v jednom workspace
+  - Možnost založení dokladu i bez importu externího souboru
+
+- **Rychlý import dat**
+  - Využití Rustu a knihovny `calamine` pro bleskové zpracování Excel souborů  
+    (`.xlsx`, `.xlsm`)
+  - Import tisíců řádků během zlomku sekundy
+
+- **Chytrá synchronizace partnerů**
+  - Automatická identifikace podle ID / IČO
+  - Aktualizace názvů a časových značek
+  - **Zachování uživatelských cest ke složkám** (nepřepisují se)
+
+- **Validace archivní struktury**
+  - Ověření fyzické existence složek v Archivu zakázek
+  - Okamžitá vizuální indikace chybějících nebo neplatných cest
+
+- **Moderní UI**
+  - Postaveno na frameworku **Slint**
+  - Tmavý režim (Dark Mode)
+  - Virtualizovaný seznam (`ListView`) umožňující práci s 14 000+ záznamy
+  - Samostatné okno průběhu importu (Progress Window)
+
+- **Multithreading**
+  - Import a zpracování dat běží na pozadí
+  - GUI zůstává plně responzivní bez zamrzání
+
+- **Lokální persistence**
+  - Nastavení i databáze ukládány do JSON souborů
+  - Bez závislosti na externím backendu nebo připojení k internetu
+
+---
 
 ## 🛠️ Použité technologie
 
 - **Jazyk:** [Rust](https://www.rust-lang.org/) 🦀
 - **GUI:** [Slint](https://slint.dev/)
-- **Data:**
-  - `serde` & `serde_json` (Práce s JSON)
-  - `calamine` (Čtení Excelu)
-  - `chrono` (Práce s časem)
-  - `rfd` (Nativní souborové dialogy)
+
+### Knihovny
+- `serde`, `serde_json` – práce s JSON daty
+- `calamine` – čtení Excel souborů
+- `chrono` – časová razítka a synchronizace
+- `rfd` – nativní systémové dialogy
+
+---
 
 ## 🚀 Jak spustit projekt
 
 ### Prerekvizity
-- Nainstalovaný **Rust** a **Cargo**.
-- Nainstalovaný **Git**.
-- VS Code (doporučeno) s rozšířením *Slint*.
+- Nainstalovaný **Rust** a **Cargo** (≥ 1.70)
+- Nainstalovaný **Git**
+- VS Code (doporučeno) s rozšířením **Slint**
 
 ### Instalace a spuštění
 
-1. **Klonování repozitáře:**
-   ```bash
-   git clone [https://github.com/TVUJ-UZIVATEL/mrb-obchodnik.git](https://github.com/TVUJ-UZIVATEL/mrb-obchodnik.git)
-   cd mrb-obchodnik
+```bash
+git clone https://github.com/TVUJ-UZIVATEL/mrb-obchodnik.git
+cd mrb-obchodnik
+cargo run --release

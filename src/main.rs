@@ -1,4 +1,4 @@
-// MRB Obchodník v0.3.6 - Rust Logic (Full Integration)
+// MRB Obchodník v0.4.0 - Hub & Import Modes
 use slint::{ComponentHandle, SharedString};
 use serde::{Deserialize, Serialize};
 use std::{fs, thread};
@@ -55,13 +55,12 @@ fn main() -> Result<(), slint::PlatformError> {
     aktualizuj_stav_db(&main_window, &config);
     obnov_tabulku_partneru(&main_window);
 
-    // --- CALLBACKY PRO FILTRY (v0.3.6) ---
+    // --- CALLBACKY PRO FILTRY ---
     
     let mw_filter_handle = main_window.as_weak();
     main_window.on_filter_zmenen(move |index| {
         if let Some(ui) = mw_filter_handle.upgrade() {
             ui.set_aktivni_filtr(index);
-            // Pokud se přepne na kartu, vymaže se text hledání
             if index != 2 {
                 ui.set_search_text(SharedString::from(""));
             }
@@ -134,12 +133,17 @@ fn main() -> Result<(), slint::PlatformError> {
         obnov_tabulku_partneru(&ui);
     });
 
-    // --- HLAVNÍ LOGIKA SYNCHRONIZACE ---
+    // --- HLAVNÍ LOGIKA SYNCHRONIZACE / IMPORTU ---
+    // Tato část byla upravena pro podporu režimů (Hub)
     
     let mw_sync_handle = main_window.as_weak();
     let pw_sync_handle = progress_window.as_weak();
 
     main_window.on_spustit_synchronizaci(move || {
+        // Zjistíme, v jakém jsme režimu (0=DB Update, 1=Poptávka, 2=Objednávka)
+        let ui_main = mw_sync_handle.upgrade().unwrap();
+        let rezim = ui_main.get_rezim_prace(); 
+
         let file_path = match rfd::FileDialog::new()
             .add_filter("Excel soubory", &["xlsx", "xlsm"])
             .pick_file() {
@@ -149,7 +153,14 @@ fn main() -> Result<(), slint::PlatformError> {
 
         if let Some(progress_ui) = pw_sync_handle.upgrade() {
             progress_ui.set_progress(0.0);
-            progress_ui.set_status("Načítám Excel...".into());
+            
+            // Text statusu podle režimu
+            let status_msg = match rezim {
+                1 => "Načítám POPTÁVKU...",
+                2 => "Načítám OBJEDNÁVKU...",
+                _ => "Aktualizuji databázi...",
+            };
+            progress_ui.set_status(status_msg.into());
             let _ = progress_ui.show();
         }
 
@@ -158,6 +169,16 @@ fn main() -> Result<(), slint::PlatformError> {
         let thread_mw = mw_sync_handle.clone();
 
         thread::spawn(move || {
+            // TADY SE VĚTVÍ LOGIKA PARSOVÁNÍ
+            if rezim == 2 {
+                println!("INFO: Zpracovávám režim OBJEDNÁVKA ze souboru: {}", path_to_process);
+                // Zde bude v budoucnu specifický parser pro "Transformatorek_MRB_rozsireny.xlsx"
+            } else if rezim == 1 {
+                println!("INFO: Zpracovávám režim POPTÁVKA ze souboru: {}", path_to_process);
+            }
+
+            // Prozatím používáme standardní logiku aktualizace DB partnerů pro všechny režimy,
+            // aby aplikace nespadla a dělala základní update.
             let mut partneri_map: HashMap<String, Partner> = HashMap::new();
             if let Ok(data) = fs::read_to_string("partneri.json") {
                 if let Ok(db) = serde_json::from_str::<Databaze>(&data) {
@@ -199,7 +220,7 @@ fn main() -> Result<(), slint::PlatformError> {
                             let _ = slint::invoke_from_event_loop(move || {
                                 if let Some(ui) = p_ui.upgrade() {
                                     ui.set_progress(val);
-                                    ui.set_status(format!("Importování: řádek {}...", idx).into());
+                                    ui.set_status(format!("Zpracování: řádek {}...", idx).into());
                                 }
                             });
                         }
@@ -222,6 +243,11 @@ fn main() -> Result<(), slint::PlatformError> {
                     let cfg = nacti_konfiguraci();
                     aktualizuj_stav_db(&mw, &cfg);
                     obnov_tabulku_partneru(&mw);
+                    
+                    // Volitelné: Zde můžeme v budoucnu zobrazit "Hotovo" hlášku specifickou pro režim
+                    if rezim == 2 {
+                        // mw.set_stav_text("Objednávka importována!".into());
+                    }
                 }
             });
         });
@@ -326,9 +352,8 @@ fn obnov_tabulku_partneru(ui: &AppWindow) {
                     if let Some(ui) = ui_handle.upgrade() {
                         let model = std::rc::Rc::new(slint::VecModel::from(filtrovana_data));
                         ui.set_model_partneru(model.into());
-                        // Statistiky posíláme vždy kompletní
                         ui.set_pocet_chybi(pocet_problemu);
-                        ui.set_pocet_celkem(celkem_partneru); // Aktualizuje statickou hodnotu celku
+                        ui.set_pocet_celkem(celkem_partneru);
                     }
                 });
             }
