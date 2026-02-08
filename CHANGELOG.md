@@ -1,3 +1,30 @@
+## [0.3.4] – 2026-02-08
+### Přidáno
+- **Kontrola aktuálnosti dat:**  
+  Implementována logika hlídání stáří databáze `partneri.json`. Stav databáze je nyní vyhodnocován vůči uživatelsky nastavenému intervalu.
+
+- **Konfigurovatelný interval kontroly:**  
+  V záložce **Obecné** přibyla možnost nastavit interval kontroly aktuálnosti databáze  
+  *(1 týden až 6 měsíců + testovací režim).*
+
+- **Nový stav „Neaktuální databáze“:**  
+  Přidán oranžový vizuální indikátor pro stav **Databáze je neaktuální** v sekci **Aktualizace dat**.
+
+### Změněno
+- **Reorganizace nastavení (UX):**  
+  Přehlednější struktura a logičtější pojmenování záložek:
+  - **Aktualizace dat** *(původně Synchronizace)*
+  - **Databáze partnerů** *(původně Správce dat)*
+  - **Obecné** *(původně Cesty)*
+
+- **Chování navigace:**  
+  Při vstupu do nastavení se aplikace nyní automaticky přepne na výchozí záložku  
+  **Aktualizace dat**.
+
+### Opraveno
+- **Čištění Rust kódu:**  
+  Odstraněn nepoužívaný import `SharedString`, čímž byl vyčištěn výstup kompilátoru a odstraněna zbytečná varování.
+
 ## [0.3.3] - 2026-02-07
 ### Opraveno
 - **Struktura layoutu:** Kompletní rekonstrukce pravého panelu. Odstraněno nesprávné vnořování do statických kontejnerů, které způsobovalo kolaps `ListView`.

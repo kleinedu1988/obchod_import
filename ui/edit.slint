@@ -1,0 +1,40 @@
+import { Button, LineEdit } from "std-widgets.slint";
+
+export component DetailWindow inherits Window {
+    in-out property <string> partner_id: "";
+    in-out property <string> partner_nazev: "";
+    in-out property <string> partner_cesta: "";
+    in-out property <string> partner_posledni_zmena: "";
+
+    callback potvrdit(string);
+    callback zrusit();
+
+    title: "Detail partnera";
+    width: 450px; height: 350px;
+    background: #1A1A1A;
+
+    VerticalLayout {
+        padding: 20px; spacing: 15px;
+        Text { text: "Detail partnera"; color: #2CC985; font-size: 20px; font-weight: 800; }
+        
+        VerticalLayout {
+            spacing: 5px;
+            Text { text: "NÁZEV: " + root.partner_nazev; color: white; }
+            Text { text: "ID: " + root.partner_id; color: #888; }
+        }
+
+        input_cesta := LineEdit {
+            text: root.partner_cesta;
+            placeholder-text: "Cesta ke složce";
+            height: 35px;
+        }
+
+        Rectangle { vertical-stretch: 1; }
+
+        HorizontalLayout {
+            spacing: 10px; alignment: end;
+            Button { text: "Zrušit"; clicked => { root.zrusit(); } }
+            Button { text: "Uložit"; primary: true; clicked => { root.potvrdit(input_cesta.text); } }
+        }
+    }
+}

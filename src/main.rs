@@ -1,10 +1,10 @@
-use slint::ComponentHandle;
+use slint::ComponentHandle; // Removed SharedString as it was unused
 use serde::{Deserialize, Serialize};
 use std::{fs, thread};
 use std::collections::HashMap;
 use std::path::Path;
 use calamine::{Reader, Xlsx, open_workbook};
-use chrono::Local;
+use chrono::{Local, NaiveDateTime, Duration};
 
 slint::include_modules!();
 
@@ -18,10 +18,21 @@ struct Partner {
     aktualizovano: String,
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug, Default)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 struct Config {
     cesta_archiv: String,
     cesta_vyroba: String,
+    interval_synchronizace: String,
+}
+
+impl Default for Config {
+    fn default() -> Self {
+        Self {
+            cesta_archiv: String::new(),
+            cesta_vyroba: String::new(),
+            interval_synchronizace: "1 týden".to_string(),
+        }
+    }
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
@@ -31,21 +42,19 @@ struct Databaze {
 }
 
 fn main() -> Result<(), slint::PlatformError> {
-    // 1. VYTVOŘENÍ OBOU OKEN
     let main_window = AppWindow::new()?;
     let progress_window = ProgressWindow::new()?;
 
-    // 2. NAČTENÍ KONFIGURACE A STAVU
-    let config = nacti_konfiguraci();
-    main_window.set_cesta_archiv(config.cesta_archiv.into());
-    main_window.set_cesta_vyroba(config.cesta_vyroba.into());
+    let mut config = nacti_konfiguraci();
+    main_window.set_cesta_archiv(config.cesta_archiv.clone().into());
+    main_window.set_cesta_vyroba(config.cesta_vyroba.clone().into());
+    main_window.set_sync_interval(config.interval_synchronizace.clone().into());
     main_window.set_verze_aplikace(env!("CARGO_PKG_VERSION").into());
     
-    // Kontrola stavu při startu
-    aktualizuj_stav_db(&main_window);
+    aktualizuj_stav_db(&main_window, &config);
     obnov_tabulku_partneru(&main_window);
 
-    // --- CALLBACKY PRO NASTAVENÍ ---
+    // --- CALLBACKY ---
     
     let mw_handle = main_window.as_weak();
     main_window.on_vybrat_archiv(move || {
@@ -64,21 +73,19 @@ fn main() -> Result<(), slint::PlatformError> {
     let mw_handle = main_window.as_weak();
     main_window.on_ulozit_nastaveni(move || {
         if let Some(ui) = mw_handle.upgrade() {
-            let cfg = Config {
-                cesta_archiv: ui.get_cesta_archiv().to_string(),
-                cesta_vyroba: ui.get_cesta_vyroba().to_string(),
-            };
-            uloz_konfiguraci(cfg);
+            config.cesta_archiv = ui.get_cesta_archiv().to_string();
+            config.cesta_vyroba = ui.get_cesta_vyroba().to_string();
+            config.interval_synchronizace = ui.get_sync_interval().to_string();
+            
+            uloz_konfiguraci(config.clone());
+            aktualizuj_stav_db(&ui, &config);
         }
     });
 
-    // --- HLAVNÍ LOGIKA S DVĚMA OKNY ---
-    
     let mw_handle = main_window.as_weak();
     let pw_handle = progress_window.as_weak();
 
     main_window.on_spustit_synchronizaci(move || {
-        // Výběr souboru
         let file_path = match rfd::FileDialog::new()
             .add_filter("Excel soubory", &["xlsx", "xlsm"])
             .pick_file() {
@@ -86,7 +93,6 @@ fn main() -> Result<(), slint::PlatformError> {
                 None => return,
             };
 
-        // 1. ZOBRAZIT PROGRESS OKNO
         if let Some(progress_ui) = pw_handle.upgrade() {
             progress_ui.set_progress(0.0);
             progress_ui.set_status("Načítám Excel...".into());
@@ -97,7 +103,6 @@ fn main() -> Result<(), slint::PlatformError> {
         let thread_pw = pw_handle.clone();
         let thread_mw = mw_handle.clone();
 
-        // 2. SPUSTIT VLÁKNO NA POZADÍ
         thread::spawn(move || {
             let mut partneri_map: HashMap<String, Partner> = HashMap::new();
 
@@ -114,7 +119,6 @@ fn main() -> Result<(), slint::PlatformError> {
 
                     for (idx, row) in rows.iter().enumerate() {
                         if idx == 0 { continue; }
-                        
                         let id = row[0].to_string().trim().to_string();
                         let nazev = row[1].to_string().trim().to_string();
 
@@ -156,11 +160,11 @@ fn main() -> Result<(), slint::PlatformError> {
                 let _ = fs::write("partneri.json", json);
             }
 
-            // UKONČENÍ: Skrýt malé okno a aktualizovat tabulku v hlavním okně
             let _ = slint::invoke_from_event_loop(move || {
                 if let Some(pw) = thread_pw.upgrade() { let _ = pw.hide(); }
                 if let Some(mw) = thread_mw.upgrade() {
-                    aktualizuj_stav_db(&mw);
+                    let cfg = nacti_konfiguraci();
+                    aktualizuj_stav_db(&mw, &cfg);
                     obnov_tabulku_partneru(&mw);
                 }
             });
@@ -172,21 +176,45 @@ fn main() -> Result<(), slint::PlatformError> {
 
 // --- POMOCNÉ FUNKCE ---
 
-fn aktualizuj_stav_db(ui: &AppWindow) {
+fn aktualizuj_stav_db(ui: &AppWindow, config: &Config) {
     let cesta = Path::new("partneri.json");
     if cesta.exists() {
         if let Ok(data) = fs::read_to_string(cesta) {
             if let Ok(db) = serde_json::from_str::<Databaze>(&data) {
-                ui.set_databaze_ok(true);
-                ui.set_stav_text("DATABÁZE JE AKTUÁLNÍ".into());
-                ui.set_posledni_sync_cas(db.posledni_sync.into());
+                ui.set_posledni_sync_cas(db.posledni_sync.clone().into());
+                
+                let last_sync_res = NaiveDateTime::parse_from_str(&db.posledni_sync, "%d.%m.%Y %H:%M");
+                
+                if let Ok(last_sync) = last_sync_res {
+                    let now = Local::now().naive_local();
+                    let diff = now.signed_duration_since(last_sync);
+                    
+                    let threshold = match config.interval_synchronizace.as_str() {
+                        "1 týden" => Duration::days(7),
+                        "14 dní" => Duration::days(14),
+                        "1 měsíc" => Duration::days(30),
+                        "6 měsíců" => Duration::days(180),
+                        "teď..." => Duration::seconds(0),
+                        _ => Duration::days(7),
+                    };
+
+                    if diff > threshold {
+                        ui.set_db_status_code(2); 
+                        ui.set_stav_text("DATABÁZE JE NEAKTUÁLNÍ".into());
+                    } else {
+                        ui.set_db_status_code(0); 
+                        ui.set_stav_text("DATABÁZE JE AKTUÁLNÍ".into());
+                    }
+                } else {
+                    ui.set_db_status_code(1);
+                    ui.set_stav_text("CHYBA FORMÁTU DATA".into());
+                }
                 return;
             }
         }
     }
-    ui.set_databaze_ok(false);
+    ui.set_db_status_code(1);
     ui.set_stav_text("DATABÁZE NENÍ NAČTENA".into());
-    ui.set_posledni_sync_cas("Nikdy".into());
 }
 
 fn nacti_konfiguraci() -> Config {
@@ -203,23 +231,15 @@ fn uloz_konfiguraci(cfg: Config) {
 
 fn obnov_tabulku_partneru(ui: &AppWindow) {
     let ui_handle = ui.as_weak();
-
     thread::spawn(move || {
         if let Ok(data) = fs::read_to_string("partneri.json") {
             if let Ok(db) = serde_json::from_str::<Databaze>(&data) {
-                
-                // 1. Spočítáme celkový počet
                 let celkem = db.partneri.len() as i32;
-
-                // 2. Spočítáme, kolik jich MÁ složku (není prázdná)
                 let ma_slozku_pocet = db.partneri.iter()
                     .filter(|p| !p.slozka.trim().is_empty())
                     .count() as i32;
-
-                // 3. Výpočet chybějících (logika: Celkem - Přiřazeno)
                 let chybi_pocet = celkem - ma_slozku_pocet;
 
-                // Připrava dat pro Slint
                 let raw_data: Vec<PartnerData> = db.partneri.into_iter().map(|p| {
                     PartnerData {
                         id: p.id.into(),
@@ -232,10 +252,8 @@ fn obnov_tabulku_partneru(ui: &AppWindow) {
 
                 let _ = slint::invoke_from_event_loop(move || {
                     let model = std::rc::Rc::new(slint::VecModel::from(raw_data));
-                    
                     if let Some(ui) = ui_handle.upgrade() {
                         ui.set_model_partneru(model.into());
-                        // Odeslání správného čísla
                         ui.set_pocet_chybi(chybi_pocet);
                     }
                 });
