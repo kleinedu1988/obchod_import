@@ -1,9 +1,10 @@
-// MRB Obchodník v0.4.0 - Hub & Import Modes
+// MRB Obchodník v0.4.0 - Hub, Import & Attachments
 use slint::{ComponentHandle, SharedString};
 use serde::{Deserialize, Serialize};
 use std::{fs, thread};
 use std::collections::HashMap;
-use std::path::Path;
+use std::path::{Path, PathBuf};
+use std::sync::{Arc, Mutex}; // Důležité pro sdílení příloh mezi vlákny
 use calamine::{Reader, Xlsx, open_workbook};
 use chrono::{Local, NaiveDateTime, Duration};
 
@@ -15,7 +16,7 @@ slint::include_modules!();
 struct Partner {
     id: String,
     nazev: String,
-    slozka: String, // Pouze název podsložky
+    slozka: String,
     aktualizovano: String,
 }
 
@@ -46,6 +47,10 @@ fn main() -> Result<(), slint::PlatformError> {
     let main_window = AppWindow::new()?;
     let progress_window = ProgressWindow::new()?;
 
+    // NOVÉ: Úložiště pro seznam příloh (PDF, STEP...)
+    // Používáme Arc<Mutex<>> aby k němu mělo přístup UI (pro přidání/mazání) i pracovní vlákno (pro kopírování)
+    let pending_attachments = Arc::new(Mutex::new(Vec::<PathBuf>::new()));
+
     let config = nacti_konfiguraci();
     main_window.set_cesta_archiv(config.cesta_archiv.clone().into());
     main_window.set_cesta_vyroba(config.cesta_vyroba.clone().into());
@@ -55,7 +60,63 @@ fn main() -> Result<(), slint::PlatformError> {
     aktualizuj_stav_db(&main_window, &config);
     obnov_tabulku_partneru(&main_window);
 
-    // --- CALLBACKY PRO FILTRY ---
+    // --- 1. LOGIKA PŘÍLOH (PŘIDÁNÍ A MAZÁNÍ) ---
+    
+    let mw_att_handle = main_window.as_weak();
+    let attachments_store = pending_attachments.clone();
+
+    // Přidání souborů (Multiselect z modré zóny)
+    main_window.on_vybrat_prilohy(move || {
+        let files = rfd::FileDialog::new()
+            .add_filter("Data", &["pdf", "step", "stp", "dxf", "dwg", "jpg", "png", "zip"])
+            .pick_files(); // Umožní vybrat více souborů naraz
+
+        if let Some(path_bufs) = files {
+            let mut store = attachments_store.lock().unwrap();
+            store.extend(path_bufs); // Přidáme nové k existujícím
+
+            // Aktualizace UI modelu (převedeme PathBuf na Slint strukturu PrilohaData)
+            let ui_data: Vec<PrilohaData> = store.iter().map(|p| {
+                PrilohaData {
+                    nazev: p.file_name().unwrap_or_default().to_string_lossy().to_string().into(),
+                    cesta: p.to_string_lossy().to_string().into(),
+                }
+            }).collect();
+
+            let ui_model = std::rc::Rc::new(slint::VecModel::from(ui_data));
+            if let Some(ui) = mw_att_handle.upgrade() {
+                ui.set_model_priloh(ui_model.into());
+            }
+        }
+    });
+
+    let mw_del_handle = main_window.as_weak();
+    let attachments_del_store = pending_attachments.clone();
+
+    // Odebrání souboru ze seznamu (Křížek u položky)
+    main_window.on_odebrat_prilohu(move |index| {
+        let idx = index as usize;
+        let mut store = attachments_del_store.lock().unwrap();
+        
+        if idx < store.len() {
+            store.remove(idx);
+            
+            // Znovu překreslit UI
+            let ui_data: Vec<PrilohaData> = store.iter().map(|p| {
+                PrilohaData {
+                    nazev: p.file_name().unwrap_or_default().to_string_lossy().to_string().into(),
+                    cesta: p.to_string_lossy().to_string().into(),
+                }
+            }).collect();
+            
+            let ui_model = std::rc::Rc::new(slint::VecModel::from(ui_data));
+            if let Some(ui) = mw_del_handle.upgrade() {
+                ui.set_model_priloh(ui_model.into());
+            }
+        }
+    });
+
+    // --- FILTRY A HLEDÁNÍ ---
     
     let mw_filter_handle = main_window.as_weak();
     main_window.on_filter_zmenen(move |index| {
@@ -75,13 +136,13 @@ fn main() -> Result<(), slint::PlatformError> {
             if !text.is_empty() {
                 ui.set_aktivni_filtr(2);
             } else {
-                ui.set_aktivni_filtr(0); // Návrat na Celkem při smazání
+                ui.set_aktivni_filtr(0);
             }
             obnov_tabulku_partneru(&ui);
         }
     });
 
-    // --- CALLBACKY PRO NASTAVENÍ A CESTY ---
+    // --- NASTAVENÍ A CESTY ---
     
     let mw_archiv_handle = main_window.as_weak();
     main_window.on_vybrat_archiv(move || {
@@ -134,13 +195,14 @@ fn main() -> Result<(), slint::PlatformError> {
     });
 
     // --- HLAVNÍ LOGIKA SYNCHRONIZACE / IMPORTU ---
-    // Tato část byla upravena pro podporu režimů (Hub)
     
     let mw_sync_handle = main_window.as_weak();
     let pw_sync_handle = progress_window.as_weak();
+    
+    // Clone úložiště příloh pro vlákno zpracování
+    let attachments_process_store = pending_attachments.clone(); 
 
     main_window.on_spustit_synchronizaci(move || {
-        // Zjistíme, v jakém jsme režimu (0=DB Update, 1=Poptávka, 2=Objednávka)
         let ui_main = mw_sync_handle.upgrade().unwrap();
         let rezim = ui_main.get_rezim_prace(); 
 
@@ -153,8 +215,6 @@ fn main() -> Result<(), slint::PlatformError> {
 
         if let Some(progress_ui) = pw_sync_handle.upgrade() {
             progress_ui.set_progress(0.0);
-            
-            // Text statusu podle režimu
             let status_msg = match rezim {
                 1 => "Načítám POPTÁVKU...",
                 2 => "Načítám OBJEDNÁVKU...",
@@ -167,18 +227,17 @@ fn main() -> Result<(), slint::PlatformError> {
         let path_to_process = file_path.to_string_lossy().to_string();
         let thread_pw = pw_sync_handle.clone();
         let thread_mw = mw_sync_handle.clone();
+        let thread_attachments = attachments_process_store.clone();
 
         thread::spawn(move || {
-            // TADY SE VĚTVÍ LOGIKA PARSOVÁNÍ
+            // 1. ZPRACOVÁNÍ EXCELU
             if rezim == 2 {
                 println!("INFO: Zpracovávám režim OBJEDNÁVKA ze souboru: {}", path_to_process);
-                // Zde bude v budoucnu specifický parser pro "Transformatorek_MRB_rozsireny.xlsx"
             } else if rezim == 1 {
                 println!("INFO: Zpracovávám režim POPTÁVKA ze souboru: {}", path_to_process);
             }
 
-            // Prozatím používáme standardní logiku aktualizace DB partnerů pro všechny režimy,
-            // aby aplikace nespadla a dělala základní update.
+            // Logika aktualizace databáze partnerů
             let mut partneri_map: HashMap<String, Partner> = HashMap::new();
             if let Ok(data) = fs::read_to_string("partneri.json") {
                 if let Ok(db) = serde_json::from_str::<Databaze>(&data) {
@@ -228,6 +287,7 @@ fn main() -> Result<(), slint::PlatformError> {
                 }
             }
 
+            // Uložení aktualizované DB
             let nyni = Local::now().format("%d.%m.%Y %H:%M").to_string();
             let nova_db = Databaze { 
                 posledni_sync: nyni, 
@@ -237,17 +297,47 @@ fn main() -> Result<(), slint::PlatformError> {
                 let _ = fs::write("partneri.json", json);
             }
 
+            // 2. KOPÍROVÁNÍ PŘÍLOH (NOVÉ)
+            // Kód se spustí pouze pokud jsou nějaké přílohy vybrány
+            let attachments = thread_attachments.lock().unwrap();
+            if !attachments.is_empty() {
+                // Aktualizujeme status okno
+                let p_ui_copy = thread_pw.clone();
+                let count = attachments.len();
+                let _ = slint::invoke_from_event_loop(move || {
+                    if let Some(ui) = p_ui_copy.upgrade() {
+                        ui.set_status(format!("Kopíruji {} příloh...", count).into());
+                    }
+                });
+
+                println!("--- Zpracovávám {} příloh ---", count);
+
+                // TODO: V budoucnu zde bude logika pro dynamickou cílovou složku podle ID zakázky
+                let cilova_slozka = Path::new("Vystup_Data"); 
+                if let Err(e) = fs::create_dir_all(cilova_slozka) {
+                     println!("Chyba při vytváření složky: {}", e);
+                }
+
+                for src_path in attachments.iter() {
+                    if let Some(name) = src_path.file_name() {
+                        let dest_path = cilova_slozka.join(name);
+                        
+                        // Kopírování souboru
+                        match fs::copy(src_path, &dest_path) {
+                            Ok(_) => println!("OK: Zkopírováno {:?}", name),
+                            Err(e) => println!("CHYBA kopírování {:?}: {}", name, e),
+                        }
+                    }
+                }
+            }
+
+            // Úklid po dokončení
             let _ = slint::invoke_from_event_loop(move || {
                 if let Some(pw) = thread_pw.upgrade() { let _ = pw.hide(); }
                 if let Some(mw) = thread_mw.upgrade() {
                     let cfg = nacti_konfiguraci();
                     aktualizuj_stav_db(&mw, &cfg);
                     obnov_tabulku_partneru(&mw);
-                    
-                    // Volitelné: Zde můžeme v budoucnu zobrazit "Hotovo" hlášku specifickou pro režim
-                    if rezim == 2 {
-                        // mw.set_stav_text("Objednávka importována!".into());
-                    }
                 }
             });
         });

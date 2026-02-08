@@ -1,3 +1,37 @@
+## [0.4.1] – 2026-02-08
+### Přidáno
+- **Zásobník příloh (Attachment Backpack)**  
+  Nová sekce v pravém panelu umožňující shromažďovat technickou dokumentaci (PDF, STEP, DXF, DWG) před samotným zpracováním zakázky.
+
+- **Multiselect souborů**  
+  Podpora hromadného výběru datových souborů v systémovém dialogu.
+
+- **Správa souborů v UI**  
+  Implementována komponenta `FileItem`, umožňující vizuální kontrolu seznamu příloh a jejich selektivní odebírání (červený křížek) před odesláním.
+
+- **Automatické kopírování příloh**  
+  Přidána Rust logika pro fyzické kopírování všech příloh ze zásobníku do cílové složky `Vystup_Data` (nebo do složky partnera) během procesu synchronizace.
+
+### Změněno
+- **Univerzální DropZone**  
+  Komponenta `DropZone` byla upravena na univerzální stavební prvek s dynamickou ikonou a texty, což umožňuje její opakované použití pro Excel i datové přílohy.
+
+- **Redesign pravého panelu**  
+  Pravý sloupec je nově vertikálně rozdělen na:
+  - sekci 1: Řídící Excel
+  - sekci 2: Datové přílohy  
+  Každá sekce má vlastní rolovací oblast.
+
+- **UI feedback v průběhu synchronizace**  
+  Status bar v okně průběhu nyní zobrazuje také počet kopírovaných příloh.
+
+### Opraveno
+- **Layout stretch v pravém panelu**  
+  Opraveno chování vertikálního roztahování (odstranění omezujícího zarovnání), díky čemuž se zásobník příloh dynamicky přizpůsobuje výšce okna.
+
+- **Typografie mazacího tlačítka**  
+  Zjemněn vizuální styl červeného křížku pro odebrání souboru, včetně interaktivního hover efektu.
+
 ## [0.4.0] – 2026-02-08
 ### Přidáno
 - **Hub (Rozcestník):**  

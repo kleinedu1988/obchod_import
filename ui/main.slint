@@ -1,6 +1,8 @@
-import { Button, VerticalBox, HorizontalBox, LineEdit, ScrollView, ListView, ComboBox, CheckBox } from "std-widgets.slint";
+import { Button, VerticalBox, HorizontalBox, LineEdit, ScrollView, ListView, ComboBox, CheckBox, StandardListView } from "std-widgets.slint";
+
 
 // --- DATOVÉ STRUKTURY ---
+
 export struct PartnerData {
     id: string,
     nazev: string,
@@ -9,27 +11,106 @@ export struct PartnerData {
     ma_slozku: bool,
 }
 
+export struct PrilohaData {
+    nazev: string,
+    cesta: string,
+}
+
+
 // --- KOMPONENTY ---
+
+// UPRAVENO: Čistý červený křížek pro smazání (hover + jemná typografie)
+component FileItem inherits Rectangle {
+    in property <string> nazev;
+    callback remove-clicked();
+
+    height: 40px;
+    background: #2a2a2a;
+    border-radius: 4px;
+    border-width: 1px;
+    border-color: #333;
+
+    HorizontalLayout {
+        padding-left: 12px; padding-right: 8px; spacing: 10px;
+
+        Text { text: "📎"; vertical-alignment: center; font-size: 14px; color: #666; }
+
+        Text {
+            text: root.nazev;
+            color: #ccc; font-size: 13px; vertical-alignment: center;
+            horizontal-stretch: 1; overflow: elide;
+        }
+
+        TouchArea {
+            width: 25px;
+            mouse-cursor: pointer;
+            clicked => { root.remove-clicked(); }
+
+            Text {
+                text: "×";
+                color: parent.has-hover ? #ff6666 : #cc4444;
+                font-size: 22px;
+                font-weight: 400;
+                vertical-alignment: center;
+                horizontal-alignment: center;
+                y: -1px;
+                animate color { duration: 150ms; }
+            }
+        }
+    }
+}
+
+component DropZone inherits Rectangle {
+    in property <color> active-color;
+    in property <string> ikona: "☁️";
+    in property <string> hlavni-text: "Nahrát soubor";
+    in property <string> vedlejsi-text: "Klikněte pro výběr";
+    callback clicked();
+
+    background: #252525;
+    border-radius: 12px;
+    border-width: 2px;
+    border-color: #444;
+
+    TouchArea { clicked => { root.clicked(); } mouse-cursor: pointer; }
+
+    VerticalLayout {
+        alignment: center; spacing: 8px;
+        Text { text: root.ikona; font-size: 32px; horizontal-alignment: center; }
+        Text {
+            text: root.hlavni-text;
+            font-size: 16px; color: #eee; horizontal-alignment: center; font-weight: 700;
+        }
+        Text {
+            text: root.vedlejsi-text;
+            font-size: 11px; color: #666; horizontal-alignment: center;
+        }
+    }
+}
 
 component MenuButton inherits Rectangle {
     in-out property<string> text;
     in-out property<bool> active;
     callback clicked;
+
     height: 45px;
     background: active ? root.active-color : touch.has-hover ? #3d3d3d : #2e2e2e;
     border-radius: 6px;
     border-width: 1px;
     border-color: active ? root.active-color : #3f3f3f;
-    
-    // ZMĚNA: Defaultní barva je nyní MODRÁ, aby se nekryla se zelenou objednávkou
-    in property <color> active-color: #4aa3df; 
+
+    in property <color> active-color: #4aa3df;
 
     touch := TouchArea { clicked => { root.clicked(); } }
+
     HorizontalLayout {
         padding-left: 20px;
         Text {
-            text: root.text; color: root.active ? #1A1A1A : white;
-            vertical-alignment: center; font-size: 14px; font-weight: root.active ? 800 : 500;
+            text: root.text;
+            color: root.active ? #1A1A1A : white;
+            vertical-alignment: center;
+            font-size: 14px;
+            font-weight: root.active ? 800 : 500;
         }
     }
 }
@@ -42,73 +123,33 @@ component HubCard inherits Rectangle {
     callback clicked();
 
     width: 320px; height: 200px;
-    
     background: touch.pressed ? #333 : #252525;
     border-radius: 16px;
     border-width: 2px;
     border-color: touch.has-hover ? root.base-color : #3d3d3d;
-    
+
     animate border-color { duration: 200ms; }
     animate background { duration: 100ms; }
 
-    touch := TouchArea {
-        clicked => { root.clicked(); }
-        mouse-cursor: pointer;
-    }
+    touch := TouchArea { clicked => { root.clicked(); } mouse-cursor: pointer; }
 
     VerticalLayout {
         padding: 30px; spacing: 15px; alignment: center;
-        Text { 
-            text: root.icon; 
-            font-size: 48px; 
-            horizontal-alignment: center; 
-        }
-        Text { 
-            text: root.title; 
-            font-size: 24px; 
-            font-weight: 800; 
+        Text { text: root.icon; font-size: 48px; horizontal-alignment: center; }
+        Text {
+            text: root.title;
+            font-size: 24px;
+            font-weight: 800;
             color: touch.has-hover ? root.base-color : white;
             horizontal-alignment: center;
             animate color { duration: 200ms; }
         }
-        Text { 
-            text: root.description; 
-            font-size: 13px; 
-            color: #888; 
-            horizontal-alignment: center; 
+        Text {
+            text: root.description;
+            font-size: 13px;
+            color: #888;
+            horizontal-alignment: center;
             wrap: word-wrap;
-        }
-    }
-}
-
-component DropZone inherits Rectangle {
-    in property <color> active-color;
-    callback clicked();
-    
-    background: #252525;
-    border-radius: 12px;
-    border-width: 2px;
-    border-color: #444; 
-    
-    TouchArea { clicked => { root.clicked(); } mouse-cursor: pointer; }
-
-    VerticalLayout {
-        alignment: center; spacing: 15px;
-        Text { text: "☁️"; font-size: 40px; horizontal-alignment: center; }
-        Text { 
-            text: "Nahrát Excel"; 
-            font-size: 18px; color: #eee; horizontal-alignment: center; font-weight: 700;
-        }
-        Text { 
-            text: "Přetáhněte soubor sem"; 
-            font-size: 12px; color: #666; horizontal-alignment: center; 
-        }
-        Rectangle { height: 5px; }
-        Rectangle {
-            height: 35px; width: 140px;
-            background: root.active-color;
-            border-radius: 6px;
-            Text { text: "Vybrat soubor"; color: #1a1a1a; font-weight: 800; vertical-alignment: center; horizontal-alignment: center; }
         }
     }
 }
@@ -133,7 +174,7 @@ component FilterCard inherits Rectangle {
     border-color: active ? #2CC985 : #3d3d3d;
     drop-shadow-blur: active ? 10px : 0px;
     drop-shadow-color: active ? #2CC98544 : #00000000;
-    
+
     animate border-color { duration: 150ms; }
     animate drop-shadow-blur { duration: 150ms; }
 
@@ -154,10 +195,12 @@ component FilterCard inherits Rectangle {
 export component ProgressWindow inherits Window {
     in-out property <float> progress: 0.0;
     in-out property <string> status: "Připravuji...";
+
     title: "Import Dat";
     width: 400px; height: 180px;
     background: #212121;
     always-on-top: true;
+
     VerticalLayout {
         padding: 30px; spacing: 20px; alignment: center;
         Text { text: root.status; color: white; font-size: 18px; font-weight: 700; horizontal-alignment: center; }
@@ -171,28 +214,32 @@ export component ProgressWindow inherits Window {
     }
 }
 
+
 export component AppWindow inherits Window {
-    in-out property <string> verze_aplikace: "0.4.0";
+    in-out property <string> verze_aplikace: "0.4.1";
+
     in-out property <string> cesta_archiv: "";
     in-out property <string> cesta_vyroba: "";
     in-out property <string> sync_interval: "1 týden";
     in-out property <string> posledni_sync_cas: "Nikdy";
-    in property <int> db_status_code: 1; 
+
+    in property <int> db_status_code: 1;
     in property <string> stav_text: "DATABÁZE NENÍ NAČTENA";
+
     in property <[PartnerData]> model_partneru: [];
+    in property <[PrilohaData]> model_priloh: [];
+
     in property <int> pocet_chybi: 0;
     in property <int> pocet_celkem: 0;
-    
-    in-out property <int> aktivni_filtr: 0; 
+
+    in-out property <int> aktivni_filtr: 0;
     in-out property <string> search_text: "";
 
-    property <int> vybrana_stranka: 0; 
-    property <int> settings_tab: 0; 
+    property <int> vybrana_stranka: 0;
+    property <int> settings_tab: 0;
 
     // --- REŽIMY APLIKACE ---
-    // 0 = Rozcestník, 1 = Poptávka, 2 = Objednávka
-    in-out property <int> rezim_prace: 0; 
-    
+    in-out property <int> rezim_prace: 0;
     property <color> akcent_barva: rezim_prace == 1 ? #f39c12 : (rezim_prace == 2 ? #27ae60 : #4aa3df);
     property <string> nazev_rezimu: rezim_prace == 1 ? "POPTÁVKA" : (rezim_prace == 2 ? "OBJEDNÁVKA" : "IMPORT");
 
@@ -203,7 +250,9 @@ export component AppWindow inherits Window {
     callback ulozit_nazev_slozky(string, string);
     callback filter_zmenen(int);
     callback search_changed(string);
-    callback manualni_vytvoreni(string, string); 
+    callback manualni_vytvoreni(string, string);
+    callback vybrat_prilohy();
+    callback odebrat_prilohu(int);
 
     title: "MRB Obchodník - v" + verze_aplikace;
     min-width: 1100px; min-height: 750px;
@@ -215,51 +264,63 @@ export component AppWindow inherits Window {
 
         // --- SIDEBAR ---
         Rectangle {
-            width: 280px; background: #212121;
+            width: 280px;
+            background: #212121;
+
             VerticalLayout {
                 padding: 25px; spacing: 10px;
-                Text { 
-                    text: "MRB Obchodník"; 
+
+                Text {
+                    text: "MRB Obchodník";
                     color: root.akcent_barva;
-                    font-size: 20px; font-weight: 900; horizontal-alignment: center; 
+                    font-size: 20px;
+                    font-weight: 900;
+                    horizontal-alignment: center;
                     animate color { duration: 300ms; }
                 }
-                
+
                 Rectangle { height: 20px; }
-                
-                // ROZCESTNÍK - Použije defaultní modrou (#4aa3df)
-                MenuButton { 
-                    text: "🏠   Rozcestník"; 
-                    active: vybrana_stranka == 0; 
-                    clicked => { 
-                        vybrana_stranka = 0; 
-                        rezim_prace = 0; 
-                    } 
+
+                MenuButton {
+                    text: "🏠   Rozcestník";
+                    active: vybrana_stranka == 0;
+                    clicked => {
+                        vybrana_stranka = 0;
+                        rezim_prace = 0;
+                    }
                 }
-                
-                // PROCESNÍ TLAČÍTKO - Bere barvu dynamicky (Oranžová/Zelená)
-                MenuButton { 
-                    text: rezim_prace == 0 ? "📂   Import dat" : (rezim_prace == 1 ? "📝   Nová Poptávka" : "📝   Nová Objednávka"); 
-                    active: vybrana_stranka == 1; 
-                    active-color: root.akcent_barva; 
-                    clicked => { vybrana_stranka = 1; } 
+
+                MenuButton {
+                    text: rezim_prace == 0 ? "📂   Import dat" : (rezim_prace == 1 ? "📝   Nová Poptávka" : "📝   Nová Objednávka");
+                    active: vybrana_stranka == 1;
+                    active-color: root.akcent_barva;
+                    clicked => { vybrana_stranka = 1; }
                 }
-                
-                // NASTAVENÍ - Použije defaultní modrou
-                MenuButton { 
-                    text: "⚙   Nastavení"; 
-                    active: vybrana_stranka == 2; 
-                    clicked => { 
-                        vybrana_stranka = 2; 
-                        settings_tab = 0; 
-                    } 
+
+                MenuButton {
+                    text: "⚙   Nastavení";
+                    active: vybrana_stranka == 2;
+                    clicked => {
+                        vybrana_stranka = 2;
+                        settings_tab = 0;
+                    }
                 }
-                
+
                 Rectangle { vertical-stretch: 1; }
-                
+
                 if (rezim_prace != 0) : Rectangle {
-                    height: 30px; background: root.akcent_barva; border-radius: 4px;
-                    Text { text: root.nazev_rezimu; color: #1a1a1a; font-weight: 800; font-size: 11px; vertical-alignment: center; horizontal-alignment: center; }
+                    height: 30px;
+                    background: root.akcent_barva;
+                    border-radius: 4px;
+
+                    Text {
+                        text: root.nazev_rezimu;
+                        color: #1a1a1a;
+                        font-weight: 800;
+                        font-size: 11px;
+                        vertical-alignment: center;
+                        horizontal-alignment: center;
+                    }
                 }
 
                 Text { text: "v" + root.verze_aplikace; color: #555; font-size: 11px; horizontal-alignment: center; }
@@ -268,7 +329,8 @@ export component AppWindow inherits Window {
 
         // --- HLAVNÍ OBSAH ---
         VerticalLayout {
-            padding: 40px; spacing: 20px;
+            padding: 40px;
+            spacing: 20px;
             horizontal-stretch: 1;
 
             if (vybrana_stranka == 2) : HorizontalLayout {
@@ -281,10 +343,11 @@ export component AppWindow inherits Window {
             VerticalLayout {
                 vertical-stretch: 1;
 
-                // 0. DOMOVSKÁ OBRAZOVKA (ROZCESTNÍK)
+                // 0. DOMOVSKÁ OBRAZOVKA
                 if (vybrana_stranka == 0) : VerticalLayout {
-                    alignment: center; spacing: 40px;
-                    
+                    alignment: center;
+                    spacing: 40px;
+
                     VerticalLayout {
                         spacing: 10px;
                         Text { text: "Co chcete zpracovat?"; font-size: 32px; font-weight: 300; color: white; horizontal-alignment: center; }
@@ -293,33 +356,30 @@ export component AppWindow inherits Window {
 
                     HorizontalLayout {
                         alignment: center; spacing: 40px;
+
                         HubCard {
                             title: "POPTÁVKA";
                             description: "Založit novou poptávku (Nabídku).\nRučně nebo importem.";
                             icon: "📄";
-                            base-color: #f39c12; 
-                            clicked => {
-                                root.rezim_prace = 1;
-                                root.vybrana_stranka = 1;
-                            }
+                            base-color: #f39c12;
+                            clicked => { root.rezim_prace = 1; root.vybrana_stranka = 1; }
                         }
+
                         HubCard {
                             title: "OBJEDNÁVKA";
                             description: "Zpracování objednávky do výroby.\nKontrola dat a převod.";
                             icon: "📦";
-                            base-color: #27ae60; 
-                            clicked => {
-                                root.rezim_prace = 2;
-                                root.vybrana_stranka = 1;
-                            }
+                            base-color: #27ae60;
+                            clicked => { root.rezim_prace = 2; root.vybrana_stranka = 1; }
                         }
                     }
                 }
 
-                // 1. FORMULÁŘ & IMPORT (FORMULÁŘ MÍSTO JEN DROPZÓNY)
+                // 1. FORMULÁŘ & IMPORT
                 if (vybrana_stranka == 1) : VerticalLayout {
                     spacing: 20px;
-                    
+                    vertical-stretch: 1;
+
                     // Hlavička
                     HorizontalLayout {
                         spacing: 15px; vertical-stretch: 0;
@@ -329,28 +389,28 @@ export component AppWindow inherits Window {
                             Text { text: rezim_prace == 1 ? "Nová Poptávka" : "Nová Objednávka"; color: white; font-size: 24px; font-weight: 300; }
                         }
                         Rectangle { horizontal-stretch: 1; }
-                        Button { 
-                            text: "Zpět na rozcestník"; 
-                            height: 35px; 
-                            clicked => { root.vybrana_stranka = 0; root.rezim_prace = 0; } 
+                        Button {
+                            text: "Zpět na rozcestník";
+                            height: 35px;
+                            clicked => { root.vybrana_stranka = 0; root.rezim_prace = 0; }
                         }
                     }
-                    
+
                     Rectangle { height: 1px; background: #333; }
 
-                    // Dvousloupcový layout: Formulář (Vlevo) | Import (Vpravo)
+                    // Dvousloupcový layout
                     HorizontalLayout {
                         spacing: 40px;
                         vertical-stretch: 1;
 
-                        // LEVÝ SLOUPEC: RUČNÍ ZADÁNÍ
+                        // LEVÝ SLOUPEC: FORMULÁŘ
                         VerticalLayout {
-                            horizontal-stretch: 2; 
-                            spacing: 20px;
+                            horizontal-stretch: 1;
+                            spacing: 15px;
                             alignment: start;
 
-                            Text { text: "📝  Ruční zadání údajů"; font-size: 18px; font-weight: 700; color: white; }
-                            
+                            Text { text: "📝   Ruční zadání údajů"; font-size: 18px; font-weight: 700; color: white; }
+
                             VerticalBox {
                                 padding: 0; spacing: 5px;
                                 FormLabel { text: "IČO / ID PARTNERA"; }
@@ -373,65 +433,121 @@ export component AppWindow inherits Window {
                                 form_poznamka := LineEdit { placeholder-text: "Interní poznámka..."; height: 40px; }
                             }
 
-                            Rectangle { height: 20px; }
-                            
+                            Rectangle { height: 10px; }
+
                             HorizontalLayout {
                                 alignment: start;
                                 CheckBox { text: "Vytvořit složku v archivu"; checked: true; }
                             }
 
-                            Rectangle { vertical-stretch: 1; } 
+                            Rectangle { vertical-stretch: 1; }
 
-                            Button { 
-                                text: "VYTVOŘIT " + root.nazev_rezimu; 
-                                height: 50px; 
-                                primary: true; 
+                            Button {
+                                text: "VYTVOŘIT " + root.nazev_rezimu;
+                                height: 50px;
+                                primary: true;
                                 clicked => { root.manualni_vytvoreni(form_id.text, form_nazev.text); }
                             }
                         }
 
-                        // ODDĚLOVAČ
                         Rectangle { width: 1px; background: #333; }
 
                         // PRAVÝ SLOUPEC: IMPORT
+                        // DŮLEŽITÉ (fix): Tady NESMÍ být 'alignment: start', jinak se vertical-stretch děti neroztáhnou.
                         VerticalLayout {
-                            horizontal-stretch: 1;
+                            width: 360px;
                             spacing: 20px;
-                            alignment: start;
 
-                            Text { text: "📂  Importovat ze souboru"; font-size: 18px; font-weight: 700; color: white; }
-                            
-                            DropZone {
-                                height: 250px; 
-                                active-color: root.akcent_barva;
-                                clicked => { root.spustit_synchronizaci(); }
+                            // 1. Excel sekce
+                            VerticalLayout {
+                                spacing: 10px; vertical-stretch: 0;
+                                Text { text: "1. Řídící soubor (Excel)"; font-size: 14px; font-weight: 700; color: #888; }
+                                DropZone {
+                                    height: 120px;
+                                    active-color: root.akcent_barva;
+                                    ikona: "📊";
+                                    hlavni-text: "Nahrát Excel";
+                                    vedlejsi-text: ".xlsx, .xlsm (Transformátorek)";
+                                    clicked => { root.spustit_synchronizaci(); }
+                                }
                             }
 
-                            Text { 
-                                text: "Podporované formáty: .xlsx, .xlsm\n(Transformátorek, Rozšířený import)"; 
-                                font-size: 12px; color: #666; wrap: word-wrap; 
+                            Rectangle { height: 1px; background: #333; }
+
+                            // 2. Přílohy sekce (musí se roztáhnout dolů)
+                            VerticalLayout {
+                                spacing: 10px;
+                                vertical-stretch: 1;
+
+                                Text { text: "2. Datové přílohy (Výkresy, Modely)"; font-size: 14px; font-weight: 700; color: #888; }
+
+                                DropZone {
+                                    height: 100px;
+                                    active-color: #4aa3df;
+                                    ikona: "📂";
+                                    hlavni-text: "Přidat výkresy / modely";
+                                    vedlejsi-text: "PDF, STEP, DXF, DWG...";
+                                    clicked => { root.vybrat_prilohy(); }
+                                }
+
+                                // Kontejner seznamu – zabere zbytek místa + vlastní scroll
+                                Rectangle {
+                                    background: #1e1e1e;
+                                    border-radius: 6px;
+                                    border-width: 1px;
+                                    border-color: #333;
+                                    vertical-stretch: 1;
+                                    clip: true;
+
+                                    ScrollView {
+                                        padding: 5px;
+
+                                        VerticalLayout {
+                                            spacing: 6px;
+                                            alignment: start;
+
+                                            for soubor[index] in root.model_priloh : FileItem {
+                                                nazev: soubor.nazev;
+                                                remove-clicked => { root.odebrat_prilohu(index); }
+                                            }
+
+                                            if (root.model_priloh.length == 0) : VerticalLayout {
+                                                padding-top: 40px;
+                                                alignment: center;
+                                                Text { text: "Žádné přílohy v zásobníku"; color: #444; font-size: 12px; horizontal-alignment: center; }
+                                            }
+                                        }
+                                    }
+                                }
                             }
-                            
-                            Rectangle { vertical-stretch: 1; }
                         }
                     }
                 }
 
-                // 2. NASTAVENÍ (Zůstává stejné)
+                // 2. NASTAVENÍ
                 if (vybrana_stranka == 2) : VerticalLayout {
+
                     if (settings_tab == 0) : VerticalLayout {
                         spacing: 25px; alignment: center;
                         Text { text: "Aktualizace databáze partnerů"; font-size: 22px; font-weight: 700; color: white; horizontal-alignment: center; }
+
                         Rectangle {
-                            border-color: root.db_status_code == 0 ? #2CC985 : (root.db_status_code == 2 ? #f39c12 : #e74c3c); 
-                            border-width: 2px; border-radius: 12px; height: 100px;
+                            border-color: root.db_status_code == 0 ? #2CC985 : (root.db_status_code == 2 ? #f39c12 : #e74c3c);
+                            border-width: 2px;
+                            border-radius: 12px;
+                            height: 100px;
                             background: root.db_status_code == 0 ? #2CC98511 : (root.db_status_code == 2 ? #f39c1211 : #e74c3c11);
-                            Text { 
-                                text: root.stav_text; 
-                                color: root.db_status_code == 0 ? #2CC985 : (root.db_status_code == 2 ? #f39c12 : #e74c3c); 
-                                font-size: 20px; font-weight: 800; horizontal-alignment: center; vertical-alignment: center; 
+
+                            Text {
+                                text: root.stav_text;
+                                color: root.db_status_code == 0 ? #2CC985 : (root.db_status_code == 2 ? #f39c12 : #e74c3c);
+                                font-size: 20px;
+                                font-weight: 800;
+                                horizontal-alignment: center;
+                                vertical-alignment: center;
                             }
                         }
+
                         Text { text: "Poslední aktualizace: " + root.posledni_sync_cas; color: #888; horizontal-alignment: center; }
                         Rectangle { vertical-stretch: 1; }
                         Button { text: "MANUÁLNÍ AKTUALIZACE DB"; height: 60px; clicked => { root.spustit_synchronizaci(); } }
@@ -442,27 +558,48 @@ export component AppWindow inherits Window {
                         spacing: 15px;
 
                         HorizontalLayout {
-                            height: 70px; spacing: 15px; vertical-stretch: 0;
+                            height: 70px;
+                            spacing: 15px;
+                            vertical-stretch: 0;
+
                             FilterCard {
-                                icon: "👥"; label: "CELKEM"; count: "\{root.pocet_celkem}";
-                                active: root.aktivni_filtr == 0; clicked => { root.filter_zmenen(0); }
+                                icon: "👥";
+                                label: "CELKEM";
+                                count: "\{root.pocet_celkem}";
+                                active: root.aktivni_filtr == 0;
+                                clicked => { root.filter_zmenen(0); }
                             }
+
                             FilterCard {
-                                icon: "⚠️"; label: "PROBLÉM SE SLOŽKOU"; count: "\{root.pocet_chybi}"; count-color: #ff4444;
-                                active: root.aktivni_filtr == 1; clicked => { root.filter_zmenen(1); }
+                                icon: "⚠️";
+                                label: "PROBLÉM SE SLOŽKOU";
+                                count: "\{root.pocet_chybi}";
+                                count-color: #ff4444;
+                                active: root.aktivni_filtr == 1;
+                                clicked => { root.filter_zmenen(1); }
                             }
+
                             Rectangle {
-                                background: #252525; border-radius: 8px; horizontal-stretch: 1;
-                                border-width: 2px; border-color: root.aktivni_filtr == 2 ? #2CC985 : #3d3d3d;
+                                background: #252525;
+                                border-radius: 8px;
+                                horizontal-stretch: 1;
+                                border-width: 2px;
+                                border-color: root.aktivni_filtr == 2 ? #2CC985 : #3d3d3d;
                                 animate border-color { duration: 150ms; }
-                                HorizontalLayout { 
+
+                                HorizontalLayout {
                                     padding-left: 15px; padding-right: 15px; spacing: 10px;
-                                    Text { text: "🔍"; vertical-alignment: center; font-size: 18px; color: root.aktivni_filtr == 2 ? #2CC985 : #666; } 
+                                    Text { text: "🔍"; vertical-alignment: center; font-size: 18px; color: root.aktivni_filtr == 2 ? #2CC985 : #666; }
                                     Rectangle {
                                         horizontal-stretch: 1;
                                         if (search-input.text == "") : Text { text: "Hledat partnera nebo ID..."; color: #555; font-size: 14px; vertical-alignment: center; horizontal-alignment: left; x: 0; }
                                         search-input := TextInput {
-                                            text <=> root.search_text; font-size: 14px; color: white; vertical-alignment: center; horizontal-alignment: left; single-line: true;
+                                            text <=> root.search_text;
+                                            font-size: 14px;
+                                            color: white;
+                                            vertical-alignment: center;
+                                            horizontal-alignment: left;
+                                            single-line: true;
                                             edited => { root.search_changed(self.text); }
                                         }
                                     }
@@ -471,7 +608,11 @@ export component AppWindow inherits Window {
                         }
 
                         Rectangle {
-                            height: 40px; background: #2a2a2a; border-radius: 6px; vertical-stretch: 0;
+                            height: 40px;
+                            background: #2a2a2a;
+                            border-radius: 6px;
+                            vertical-stretch: 0;
+
                             HorizontalLayout {
                                 padding-left: 20px; padding-right: 20px;
                                 Text { text: "STAV"; width: 60px; color: #666; font-size: 11px; font-weight: 800; vertical-alignment: center; horizontal-alignment: left; }
@@ -483,22 +624,52 @@ export component AppWindow inherits Window {
 
                         ListView {
                             vertical-stretch: 1;
+
                             for partner in root.model_partneru : Rectangle {
-                                height: 50px; background: #1e1e1e; border-radius: 6px;
+                                height: 50px;
+                                background: #1e1e1e;
+                                border-radius: 6px;
+
                                 HorizontalLayout {
                                     padding-left: 20px; padding-right: 20px;
-                                    Rectangle { width: 60px; VerticalLayout { alignment: center; Rectangle { width: 10px; height: 10px; border-radius: 5px; background: partner.ma-slozku ? #2CC985 : #ff4444; x: 0; } } }
-                                    Text { text: partner.id; width: 80px; color: #aaa; vertical-alignment: center; horizontal-alignment: left; }
-                                    Text { text: partner.nazev; width: 250px; color: white; font-weight: 600; vertical-alignment: center; horizontal-alignment: left; overflow: elide; }
+
                                     Rectangle {
-                                        horizontal-stretch: 1; background: #252525; border-radius: 4px; border-width: 1px; border-color: folder-input.has-focus ? #2CC985 : #333; height: 32px; y: (50px - 32px) / 2; animate border-color { duration: 150ms; }
+                                        width: 60px;
+                                        VerticalLayout {
+                                            alignment: center;
+                                            Rectangle { width: 10px; height: 10px; border-radius: 5px; background: partner.ma-slozku ? #2CC985 : #ff4444; x: 0; }
+                                        }
+                                    }
+
+                                    Text { text: partner.id; width: 80px; color: #aaa; vertical-alignment: center; horizontal-alignment: left; }
+
+                                    Text { text: partner.nazev; width: 250px; color: white; font-weight: 600; vertical-alignment: center; horizontal-alignment: left; overflow: elide; }
+
+                                    Rectangle {
+                                        horizontal-stretch: 1;
+                                        background: #252525;
+                                        border-radius: 4px;
+                                        border-width: 1px;
+                                        border-color: folder-input.has-focus ? #2CC985 : #333;
+                                        height: 32px;
+                                        y: (50px - 32px) / 2;
+                                        animate border-color { duration: 150ms; }
+
                                         HorizontalLayout {
                                             padding-left: 10px; padding-right: 10px;
+
                                             Rectangle {
                                                 horizontal-stretch: 1;
+
                                                 if (folder-input.text == "") : Text { text: "Zadejte název složky..."; color: #555; font-size: 13px; vertical-alignment: center; horizontal-alignment: left; }
+
                                                 folder-input := TextInput {
-                                                    text: partner.slozka; font-size: 14px; color: white; vertical-alignment: center; horizontal-alignment: left; single-line: true;
+                                                    text: partner.slozka;
+                                                    font-size: 14px;
+                                                    color: white;
+                                                    vertical-alignment: center;
+                                                    horizontal-alignment: left;
+                                                    single-line: true;
                                                     accepted => { root.ulozit_nazev_slozky(partner.id, self.text); }
                                                 }
                                             }
@@ -510,11 +681,67 @@ export component AppWindow inherits Window {
                     }
 
                     if (settings_tab == 2) : VerticalLayout {
-                        spacing: 20px; alignment: start;
-                        VerticalBox { spacing: 5px; padding: 0; Text { text: "CESTA K ARCHIVU ZAKÁZEK"; color: #888; font-size: 11px; font-weight: 700; } HorizontalLayout { spacing: 10px; height: 40px; LineEdit { text: cesta_archiv; height: 40px; font-size: 14px; edited(t) => { root.cesta_archiv = t; } } Button { text: "Změnit"; width: 100px; clicked => { root.vybrat_archiv(); } } } }
-                        VerticalBox { spacing: 5px; padding: 0; Text { text: "CESTA PRO IMPORT DO VÝROBY"; color: #888; font-size: 11px; font-weight: 700; } HorizontalLayout { spacing: 10px; height: 40px; LineEdit { text: cesta_vyroba; height: 40px; font-size: 14px; edited(t) => { root.cesta_vyroba = t; } } Button { text: "Změnit"; width: 100px; clicked => { root.vybrat_vyrobu(); } } } }
-                        VerticalBox { spacing: 5px; padding: 0; Text { text: "INTERVAL KONTROLY AKTUÁLNOSTI DAT"; color: #888; font-size: 11px; font-weight: 700; } ComboBox { height: 40px; model: ["1 týden", "14 dní", "1 měsíc", "6 měsíců", "teď..."]; current-value: root.sync_interval; selected(val) => { root.sync_interval = val; root.ulozit_nastaveni(); } } }
+                        spacing: 20px;
+                        alignment: start;
+
+                        VerticalBox {
+                            spacing: 5px;
+                            padding: 0;
+
+                            Text { text: "CESTA K ARCHIVU ZAKÁZEK"; color: #888; font-size: 11px; font-weight: 700; }
+
+                            HorizontalLayout {
+                                spacing: 10px;
+                                height: 40px;
+
+                                LineEdit {
+                                    text: cesta_archiv;
+                                    height: 40px;
+                                    font-size: 14px;
+                                    edited(t) => { root.cesta_archiv = t; }
+                                }
+
+                                Button { text: "Změnit"; width: 100px; clicked => { root.vybrat_archiv(); } }
+                            }
+                        }
+
+                        VerticalBox {
+                            spacing: 5px;
+                            padding: 0;
+
+                            Text { text: "CESTA PRO IMPORT DO VÝROBY"; color: #888; font-size: 11px; font-weight: 700; }
+
+                            HorizontalLayout {
+                                spacing: 10px;
+                                height: 40px;
+
+                                LineEdit {
+                                    text: cesta_vyroba;
+                                    height: 40px;
+                                    font-size: 14px;
+                                    edited(t) => { root.cesta_vyroba = t; }
+                                }
+
+                                Button { text: "Změnit"; width: 100px; clicked => { root.vybrat_vyrobu(); } }
+                            }
+                        }
+
+                        VerticalBox {
+                            spacing: 5px;
+                            padding: 0;
+
+                            Text { text: "INTERVAL KONTROLY AKTUÁLNOSTI DAT"; color: #888; font-size: 11px; font-weight: 700; }
+
+                            ComboBox {
+                                height: 40px;
+                                model: ["1 týden", "14 dní", "1 měsíc", "6 měsíců", "teď..."];
+                                current-value: root.sync_interval;
+                                selected(val) => { root.sync_interval = val; root.ulozit_nastaveni(); }
+                            }
+                        }
+
                         Rectangle { vertical-stretch: 1; }
+
                         Button { text: "ULOŽIT VEŠKERÁ NASTAVENÍ"; height: 50px; primary: true; clicked => { root.ulozit_nastaveni(); } }
                     }
                 }
