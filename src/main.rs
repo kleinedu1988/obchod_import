@@ -1,4 +1,4 @@
-use slint::ComponentHandle; // Removed SharedString as it was unused
+use slint::ComponentHandle;
 use serde::{Deserialize, Serialize};
 use std::{fs, thread};
 use std::collections::HashMap;
@@ -14,7 +14,7 @@ slint::include_modules!();
 struct Partner {
     id: String,
     nazev: String,
-    slozka: String,
+    slozka: String, // Pouze název podsložky
     aktualizovano: String,
 }
 
@@ -54,7 +54,7 @@ fn main() -> Result<(), slint::PlatformError> {
     aktualizuj_stav_db(&main_window, &config);
     obnov_tabulku_partneru(&main_window);
 
-    // --- CALLBACKY ---
+    // --- CALLBACKY PRO NASTAVENÍ ---
     
     let mw_handle = main_window.as_weak();
     main_window.on_vybrat_archiv(move || {
@@ -79,9 +79,34 @@ fn main() -> Result<(), slint::PlatformError> {
             
             uloz_konfiguraci(config.clone());
             aktualizuj_stav_db(&ui, &config);
+            obnov_tabulku_partneru(&ui);
         }
     });
 
+    // --- EDITACE NÁZVU SLOŽKY ---
+
+    let mw_handle = main_window.as_weak();
+    main_window.on_ulozit_nazev_slozky(move |partner_id, novy_nazev| {
+        let ui = mw_handle.upgrade().unwrap();
+        let p_id = partner_id.to_string();
+        let n_val = novy_nazev.to_string();
+
+        if let Ok(data) = fs::read_to_string("partneri.json") {
+            if let Ok(mut db) = serde_json::from_str::<Databaze>(&data) {
+                if let Some(p) = db.partneri.iter_mut().find(|p| p.id == p_id) {
+                    p.slozka = n_val;
+                    p.aktualizovano = Local::now().format("%d.%m.%Y %H:%M").to_string();
+                }
+                if let Ok(json) = serde_json::to_string_pretty(&db) {
+                    let _ = fs::write("partneri.json", json);
+                }
+            }
+        }
+        obnov_tabulku_partneru(&ui);
+    });
+
+    // --- HLAVNÍ LOGIKA SYNCHRONIZACE ---
+    
     let mw_handle = main_window.as_weak();
     let pw_handle = progress_window.as_weak();
 
@@ -105,7 +130,6 @@ fn main() -> Result<(), slint::PlatformError> {
 
         thread::spawn(move || {
             let mut partneri_map: HashMap<String, Partner> = HashMap::new();
-
             if let Ok(data) = fs::read_to_string("partneri.json") {
                 if let Ok(db) = serde_json::from_str::<Databaze>(&data) {
                     for p in db.partneri { partneri_map.insert(p.id.clone(), p); }
@@ -136,13 +160,13 @@ fn main() -> Result<(), slint::PlatformError> {
                             }
                         }
 
-                        if idx % 5 == 0 {
+                        if idx % 10 == 0 {
                             let val = idx as f32 / total_rows;
                             let p_ui = thread_pw.clone();
                             let _ = slint::invoke_from_event_loop(move || {
                                 if let Some(ui) = p_ui.upgrade() {
                                     ui.set_progress(val);
-                                    ui.set_status(format!("Zpracovávám řádek {}...", idx).into());
+                                    ui.set_status(format!("Importování: řádek {}...", idx).into());
                                 }
                             });
                         }
@@ -155,7 +179,6 @@ fn main() -> Result<(), slint::PlatformError> {
                 posledni_sync: nyni, 
                 partneri: partneri_map.values().cloned().collect() 
             };
-            
             if let Ok(json) = serde_json::to_string_pretty(&nova_db) {
                 let _ = fs::write("partneri.json", json);
             }
@@ -182,13 +205,10 @@ fn aktualizuj_stav_db(ui: &AppWindow, config: &Config) {
         if let Ok(data) = fs::read_to_string(cesta) {
             if let Ok(db) = serde_json::from_str::<Databaze>(&data) {
                 ui.set_posledni_sync_cas(db.posledni_sync.clone().into());
-                
                 let last_sync_res = NaiveDateTime::parse_from_str(&db.posledni_sync, "%d.%m.%Y %H:%M");
-                
                 if let Ok(last_sync) = last_sync_res {
                     let now = Local::now().naive_local();
                     let diff = now.signed_duration_since(last_sync);
-                    
                     let threshold = match config.interval_synchronizace.as_str() {
                         "1 týden" => Duration::days(7),
                         "14 dní" => Duration::days(14),
@@ -197,14 +217,8 @@ fn aktualizuj_stav_db(ui: &AppWindow, config: &Config) {
                         "teď..." => Duration::seconds(0),
                         _ => Duration::days(7),
                     };
-
-                    if diff > threshold {
-                        ui.set_db_status_code(2); 
-                        ui.set_stav_text("DATABÁZE JE NEAKTUÁLNÍ".into());
-                    } else {
-                        ui.set_db_status_code(0); 
-                        ui.set_stav_text("DATABÁZE JE AKTUÁLNÍ".into());
-                    }
+                    ui.set_db_status_code(if diff > threshold { 2 } else { 0 });
+                    ui.set_stav_text(if diff > threshold { "DATABÁZE JE NEAKTUÁLNÍ".into() } else { "DATABÁZE JE AKTUÁLNÍ".into() });
                 } else {
                     ui.set_db_status_code(1);
                     ui.set_stav_text("CHYBA FORMÁTU DATA".into());
@@ -231,30 +245,40 @@ fn uloz_konfiguraci(cfg: Config) {
 
 fn obnov_tabulku_partneru(ui: &AppWindow) {
     let ui_handle = ui.as_weak();
+    let config = nacti_konfiguraci();
+
     thread::spawn(move || {
         if let Ok(data) = fs::read_to_string("partneri.json") {
             if let Ok(db) = serde_json::from_str::<Databaze>(&data) {
                 let celkem = db.partneri.len() as i32;
-                let ma_slozku_pocet = db.partneri.iter()
-                    .filter(|p| !p.slozka.trim().is_empty())
-                    .count() as i32;
-                let chybi_pocet = celkem - ma_slozku_pocet;
+                
+                let mut raw_data: Vec<PartnerData> = db.partneri.into_iter().map(|p| {
+                    let has_name = !p.slozka.trim().is_empty();
+                    
+                    // Kontrola fyzické existence POUZE v cestě k ARCHIVU
+                    let mut exists_in_archive = false;
+                    if has_name {
+                        let path_arch = Path::new(&config.cesta_archiv).join(&p.slozka);
+                        exists_in_archive = path_arch.exists();
+                    }
 
-                let raw_data: Vec<PartnerData> = db.partneri.into_iter().map(|p| {
                     PartnerData {
                         id: p.id.into(),
                         nazev: p.nazev.into(),
                         slozka: p.slozka.clone().into(),
                         aktualizovano: p.aktualizovano.into(),
-                        ma_slozku: !p.slozka.is_empty(),
+                        ma_slozku: has_name && exists_in_archive, 
                     }
                 }).collect();
+                
+                let ma_slozku_pocet = raw_data.iter().filter(|p| p.ma_slozku).count() as i32;
+                raw_data.sort_by(|a, b| a.id.cmp(&b.id));
 
                 let _ = slint::invoke_from_event_loop(move || {
                     let model = std::rc::Rc::new(slint::VecModel::from(raw_data));
                     if let Some(ui) = ui_handle.upgrade() {
                         ui.set_model_partneru(model.into());
-                        ui.set_pocet_chybi(chybi_pocet);
+                        ui.set_pocet_chybi(celkem - ma_slozku_pocet);
                     }
                 });
             }

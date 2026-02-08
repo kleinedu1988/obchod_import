@@ -1,3 +1,26 @@
+## [0.3.5] – 2026-02-08
+
+### Přidáno
+- **Inline editace složek:**  
+  Název složky partnera lze nyní upravit přímo v tabulce pomocí textového pole.  
+  Změna se uloží potvrzením klávesou **Enter**.
+
+- **Validace existence složek:**  
+  Implementována automatická kontrola, zda zadaný název složky fyzicky existuje v definované **cestě k Archivu zakázek**.
+
+### Změněno
+- **Logika stavových indikátorů:**  
+  Stavový indikátor partnera (puntík) je nyní **zelený pouze tehdy**, pokud:
+  - je vyplněn název složky **a zároveň**
+  - tato složka skutečně existuje v Archivu zakázek.
+
+- **Zpřesnění UI textace:**  
+  Texty v tabulce i ve statistikách byly upraveny tak, aby jednoznačně deklarovaly, že se ověřuje **přítomnost složky v Archivu zakázek**.
+
+### Opraveno
+- **Projektová hygiena:**  
+  Soubory `partneri.json` a `nastaveni.json` byly přidány do `.gitignore`, čímž se zabránilo nechtěnému verzování citlivých lokálních dat.
+
 ## [0.3.4] – 2026-02-08
 ### Přidáno
 - **Kontrola aktuálnosti dat:**  
