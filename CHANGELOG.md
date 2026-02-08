@@ -1,3 +1,19 @@
+## [0.4.2] - 2026-02-08
+### ✨ Přidáno
+- **Zásobník příloh (Attachment Backpack):** Implementována sekundární zóna v pravém panelu pro shromažďování technické dokumentace (PDF, STEP, DXF) před zpracováním.
+- **Multiselect:** Přidána podpora pro výběr více souborů najednou v systémovém dialogu.
+- **Správa souborů:** Vizualizace seznamu příloh s možností odebrání (červený křížek) před finálním odesláním.
+- **Kopírovací logika:** Backend (Rust) nyní při synchronizaci zkopíruje nejen data z Excelu, ale i všechny soubory ze zásobníku do cílové složky.
+
+### ⚙️ Změněno
+- **Layout Importu:** Pravý panel rozdělen na dvě nezávislé sekce (Řídící Excel nahoře, Přílohy dole).
+- **Univerzální DropZone:** Komponenta DropZone upravena pro obecné použití (Excel i Přílohy).
+- **Status Bar:** Rozšířena zpětná vazba o informace týkající se kopírování souborů.
+
+### 🛠️ Opraveno
+- **Layout Stretch:** Opraveno chování pružiny (vertical-stretch) v pravém panelu, zásobník nyní správně vyplňuje volné místo.
+- **UI detaily:** Vylepšena typografie a hover efekty u mazacích tlačítek v seznamu souborů.
+
 ## [0.4.1] – 2026-02-08
 ### Přidáno
 - **Zásobník příloh (Attachment Backpack)**  

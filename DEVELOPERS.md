@@ -10,18 +10,21 @@ Popisuje architekturu, datové toky a konvence, které chrání stabilitu UI a k
 
 ## 1. Struktura projektu
 
-Doporučená struktura repozitáře:
+Projekt je rozdělen do modulů pro lepší čitelnost a testovatelnost.
 
 ```text
 /src
-  main.rs
+  main.rs          # Inicializace UI, handlery a propojení modulů
+  models.rs        # Datové struktury (structs) a modely pro JSON
+  config.rs        # I/O operace pro nastaveni.json
+  logic.rs         # Výpočetní logika, filtrace, Excel a FS validace
 /ui
-  main.slint
-  detail.slint        (volitelné / dle verze)
-build.rs
-Cargo.toml
-partneri.json         (lokální data – v .gitignore)
-nastaveni.json        (lokální data – v .gitignore)
+  main.slint       # Root UI soubor
+  detail.slint     # Komponenty importované v main.slint (dle verze)
+build.rs           # Slint build pipeline
+Cargo.toml         # Závislosti (slint, serde, chrono, rfd...)
+partneri.json      # Lokální databáze (v .gitignore)
+nastaveni.json     # Konfigurace (v .gitignore)
 ```
 
 ---
@@ -35,6 +38,11 @@ Aplikace používá generování UI modulů pomocí `slint-build`.
 * `build.rs` **kompiluje pouze root UI soubor** (`ui/main.slint`)
 * další `.slint` soubory se **importují v `main.slint`**
 * **nikdy nekompilovat více root UI souborů**
+
+Porušení těchto pravidel typicky vede k chybám:
+
+* `cannot find type AppWindow`
+* `PartnerData not found`
 
 ### Správná konfigurace
 
@@ -52,11 +60,6 @@ fn main() {
 import { DetailWindow } from "detail.slint";
 ```
 
-Porušení těchto pravidel typicky vede k chybám:
-
-* `cannot find type AppWindow`
-* `PartnerData not found`
-
 ---
 
 ## 3. Architektura: UI ↔ Backend
@@ -65,7 +68,7 @@ Porušení těchto pravidel typicky vede k chybám:
 
 Soubor: `ui/main.slint`
 
-UI je **deklarativní** a vystavuje pouze rozhraní:
+UI je **deklarativní** a vystavuje pouze rozhraní (callbacky a vlastnosti). Neslouží k provádění logiky.
 
 * `export component AppWindow`
 * `export component ProgressWindow`
@@ -78,17 +81,24 @@ UI **neobsahuje business logiku**, pouze:
 * lokální interakce (klik, focus)
 * volání callbacků do Rustu
 
-### Backend vrstva (Rust)
+### Backend vrstva (Rust moduly)
 
-Soubor: `src/main.rs`
+* **main.rs** – „lepidlo“ aplikace
 
-Backend:
+  * obsahuje `main()`
+  * nastavuje callbacky z UI
+  * spouští vlákna pro náročné operace
 
-* načítá a ukládá lokální JSON soubory
-* parsuje Excel pomocí `calamine`
-* počítá statistiky
-* provádí validace složek v archivu
-* aktualizuje UI přes `slint::invoke_from_event_loop`
+* **logic.rs** – veškeré „přemýšlení"
+
+  * filtrace, třídění, statistiky
+  * validace složek v archivu
+  * práce se souborovým systémem
+  * neví nic o existenci UI
+
+* **config.rs** – izolace I/O pro konfiguraci
+
+* **models.rs** – jediné místo pro definici datových struktur
 
 ---
 
@@ -97,62 +107,62 @@ Backend:
 ### Datové soubory
 
 * `partneri.json` – lokální databáze partnerů
-* `nastaveni.json` – konfigurace prostředí (cesty, intervaly)
+* `nastaveni.json` – konfigurace cest a intervalů
 
 > Tyto soubory jsou lokální a **musí být v `.gitignore`**.
 
-### Datové struktury
+### Datové struktury (models.rs)
 
-**Rust**
+* **Partner**
 
-* `Partner` – persistovaný záznam
+  * `id`
+  * `nazev`
+  * `slozka`
+  * `aktualizovano`
 
-  * `id`, `nazev`, `slozka`, `aktualizovano`
+* **Databaze**
 
-* `Databaze` – obálka nad kolekcí + `posledni_sync`
+  * seznam partnerů
+  * `posledni_sync`
 
-* `Config`
+* **Config**
 
   * `cesta_archiv`
   * `cesta_vyroba`
   * `interval_synchronizace`
 
-**Slint**
+### UI projekce
 
-* `PartnerData` – UI projekce
+* **PartnerData**
 
-  * `ma_slozku` je **odvozená hodnota** (viz validace archivu)
+  * `ma_slozku` je **odvozená hodnota**
 
-### Zásady importu / merge
+### Zásady importu
 
 * import **nesmí přepsat `slozka`**, pokud byla ručně zadána
-* `nazev` a `aktualizovano` se aktualizují pouze při změně
+* `nazev` a `aktualizovano` se mění pouze při skutečné změně
 * `posledni_sync` se nastaví po dokončení importu
 
 ---
 
 ## 5. Režimy aplikace a workflow
 
-Aplikace používá procesní režimy přes `rezim_prace`:
+Aplikace rozlišuje procesní režimy přes `rezim_prace`:
 
-* `0` – Rozcestník (Hub)
+* `0` – Rozcestník
 * `1` – Poptávka
 * `2` – Objednávka
 
 UI z režimu odvozuje:
 
-* `akcent_barva` (oranžová / zelená / modrá)
-* `nazev_rezimu`
+* akcent barvy
+* název režimu
 
-### Důsledky pro backend
+### Backend chování
 
-Callback `spustit_synchronizaci()` běží ve všech režimech:
+Logika výběru dat pro jednotlivé režimy patří výhradně do `logic.rs`.
 
-* `rezim == 0` – aktualizace databáze
-* `rezim == 1` – import podkladů pro poptávku (budoucí parser)
-* `rezim == 2` – import podkladů pro objednávku (budoucí parser)
-
-Aktuálně všechny režimy používají **standardní update partnerů**, aby zůstala zachována stabilita aplikace.
+Aktuálně všechny režimy používají standardní synchronizaci partnerů, aby zůstala zachována stabilita aplikace.
 
 ---
 
@@ -162,207 +172,108 @@ Aktuálně všechny režimy používají **standardní update partnerů**, aby z
 
 **Slint UI se nikdy nesmí měnit z background threadu.**
 
-* background thread:
+### Doporučený tok
 
-  * parsování Excelu
-  * práce se soubory
-  * validace složek
+1. uživatel klikne na tlačítko (handler v `main.rs`)
+2. `main.rs` spustí `thread::spawn`
+3. vlákno zavolá funkci z `logic.rs`
+4. výsledek se vrátí do UI přes `slint::invoke_from_event_loop`
 
-* UI thread:
-
-  * `set_*`
-  * změny modelů
-
-### Doporučený vzor
-
-* dlouhá operace → `thread::spawn`
-* update UI → `slint::invoke_from_event_loop`
-
-### Progress okno
-
-* `ProgressWindow` se zobrazí před spuštěním threadu
-* průběh se aktualizuje periodicky (např. `idx % 10`)
-* okno se skryje po dokončení operace
-
----
-
-## 7. Validace složek v archivu
-
-Pole `Partner.slozka` ukládá **pouze název podsložky**, nikoli absolutní cestu.
-
-Validace probíhá při přípravě modelu pro UI:
-
-Složka je platná, pokud:
-
-* `slozka` není prázdná
-* existuje fyzicky v `Path::new(config.cesta_archiv).join(slozka)`
-
-Výsledek:
-
-```text
-PartnerData.ma_slozku = has_name && exists_in_archive
-```
-
-Indikátor v UI je zelený pouze při splnění obou podmínek.
-
----
-
-## 8. Filtrace a vyhledávání
-
-### Stavové proměnné
-
-* `aktivni_filtr`
-
-  * `0` – Celkem
-  * `1` – Problém se složkou
-  * `2` – Vyhledávání
-
-* `search_text`
-
-### Logika
-
-* změna filtru resetuje `search_text` (pokud `filtr != 2`)
-* vyhledávání automaticky přepíná filtr na `2`
-* smazání vyhledávání vrací filtr na `0`
-
-### Statistiky
-
-* `pocet_celkem` – konstantní (nezávislé na filtrech)
-* `pocet_chybi` – počítáno z **plného datasetu**, ne z filtrovaného
-
----
-
-## 9. Inline editace složek
-
-V tabulce je `TextInput` pro `partner.slozka`.
-
-Uložení probíhá:
-
-* při `accepted` (Enter)
-* callback: `ulozit_nazev_slozky(partner.id, self.text)`
-
-Backend:
-
-* aktualizuje `partneri.json`
-* nastaví `aktualizovano`
-* znovu načte model (obnova tabulky)
-
-### Doporučení
-
-* nepoužívat `unwrap()` na `upgrade()` UI handle
-* validovat `novy_nazev`:
-
-  * `trim()`
-  * zakázané znaky dle filesystemu
-
----
-
-## 10. Status databáze
-
-Funkce `aktualizuj_stav_db()`:
-
-* načte `partneri.json`
-* parsuje `posledni_sync` (`%d.%m.%Y %H:%M`)
-* porovná s `interval_synchronizace`
-
-Nastavuje:
-
-* `db_status_code`
-
-  * `0` – aktuální (zelená)
-  * `2` – neaktuální (oranžová)
-  * `1` – chyba / nenačteno (červená)
-
-* `stav_text`
-
-* `posledni_sync_cas`
-
----
-
-## 11. Konvence a doporučení
-
-### UI
-
-* vlastní property: `snake_case` (`ma_slozku`, `model_partneru`)
-* `-` je vyhrazen pro built-in property (`padding-left`, `horizontal-alignment`)
-
-### Rust
-
-* žádné UI mutace mimo `invoke_from_event_loop`
-* preferovat bezpečný vzor:
+### Bezpečný vzor
 
 ```rust
 let Some(ui) = weak.upgrade() else { return; };
 ```
 
-* minimalizovat opakované čtení JSON (budoucí optimalizace)
+---
 
-### Výkon (budoucí zlepšení)
+## 7. Validace složek v archivu
 
-* debounce / batch inline editací
-* cache `partneri.json` v paměti a zapisovat pouze diff
+Validace je součástí přípravy dat v `logic.rs`.
+
+Cesta se skládá dynamicky:
+
+```rust
+Path::new(&config.cesta_archiv).join(&partner.slozka)
+```
+
+UI model dostává pouze výsledek:
+
+```text
+PartnerData.ma_slozku = bool
+```
+
+---
+
+## 8. Filtrace a vyhledávání
+
+Logika filtrace je implementována v `logic::priprav_data_partneru`.
+
+### Vstup
+
+* reference na konfiguraci
+* index filtru
+* hledaný text
+
+### Výstup
+
+* vyfiltrovaný a seřazený seznam partnerů
+* vypočtené statistiky
+
+---
+
+## 9. Inline editace složek
+
+Změna názvu složky:
+
+* probíhá v UI
+* ukládá se callbackem do backendu
+* aktualizuje `partneri.json`
+* znovu se načítá model
+
+Doporučení:
+
+* vždy `trim()` vstup
+* validovat zakázané znaky
+
+---
+
+## 10. Status databáze
+
+Funkce `logic::zkontroluj_stav_db` vrací stavový kód:
+
+* `0` – OK (zelená)
+* `1` – chyba / nenačteno (červená)
+* `2` – neaktuální (oranžová)
+
+---
+
+## 11. Konvence a doporučení
+
+### Modularita
+
+* nové výpočetní funkce → `logic.rs`
+* nové datové parametry → `models.rs`
+* `main.rs` pouze UI glue kód
+
+### Bezpečnost
+
+* UI měnit pouze přes `invoke_from_event_loop`
+* při práci s UI z vláken vždy používat `weak.upgrade()`
+* I/O operace izolovat do `config.rs`
 
 ---
 
 ## 12. Troubleshooting
 
-### `cannot find type AppWindow / PartnerData`
+### „Změnil jsem strukturu Partnera a aplikace padá"
 
-* špatně zapojená build pipeline
-* `build.rs` musí kompilovat pouze root UI soubor
-* `PartnerData` musí být `export struct`
-* `detail.slint` se **importuje**, nekompiluje
+* zkontroluj shodu `models.rs` ↔ `PartnerData` v `main.slint`
 
-### UI zamrzá při importu
+### „Data v tabulce se neaktualizují"
 
-* import musí běžet v `thread::spawn`
-* UI update pouze přes `invoke_from_event_loop`
-
-### Zelený stav se neukazuje
-
-* ověř `cesta_archiv` v `nastaveni.json`
-* `Partner.slozka` je pouze název podsložky
-* validace používá `Path::join`
+* ověř, že `ui.set_model_partneru(...)` je voláno uvnitř `invoke_from_event_loop`
 
 ---
 
-## 13. Roadmap (vývojářská)
-
-* parser režimu **Objednávka** (`Transformatorek_MRB_rozsireny.xlsx`)
-* parser režimu **Poptávka** (standardizace vstupu)
-* volitelná tvorba složek v archivu (checkbox)
-* lepší error reporting (UI hlášky místo `println!`)
-
----
-
-## 14. Poznámky k aktuálnímu kódu
-
-### 1) Konvence názvů property v UI
-
-Chybné:
-
-```slint
-partner.ma-slozku
-```
-
-Správně:
-
-```slint
-partner.ma_slozku
-```
-
-### 2) Bezpečné čtení Excel buněk
-
-Chybné:
-
-```rust
-let id = row[0].to_string();
-let nazev = row[1].to_string();
-```
-
-Správné:
-
-```rust
-let id = row.get(0).map(|c| c.to_string()).unwrap_or_default();
-let nazev = row.get(1).map(|c| c.to_string()).unwrap_or_default();
-```
+Tento dokument reflektuje stav po refaktoringu na **verzi 0.2.0 (modulární architektura)**.
